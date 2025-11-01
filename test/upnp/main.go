@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/huin/goupnp/dcps/internetgateway1"
-	"github.com/huin/goupnp/dcps/internetgateway2"
 )
 
 // getLocalIP 获取本机内网IP地址
@@ -37,128 +36,54 @@ func addPortMapping(externalPort, internalPort uint16, protocol, description str
 	fmt.Printf("本机IP: %s\n", localIP)
 	fmt.Printf("尝试添加端口映射: 外部端口 %d -> 内部端口 %d (%s)\n", externalPort, internalPort, protocol)
 
-	// 先尝试 IGDv2
-	clients, _, err := internetgateway2.NewWANIPConnection2Clients()
-	if err == nil && len(clients) > 0 {
-		fmt.Println("使用 Internet Gateway Device v2")
-		for _, client := range clients {
-			err = client.AddPortMapping(
-				"",           // NewRemoteHost (空字符串表示任意)
-				externalPort, // NewExternalPort
-				protocol,     // NewProtocol (TCP/UDP)
-				internalPort, // NewInternalPort
-				localIP,      // NewInternalClient
-				true,         // NewEnabled
-				description,  // NewPortMappingDescription
-				uint32(0),    // NewLeaseDuration (0表示永久)
-			)
-			if err != nil {
-				log.Printf("IGDv2 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			fmt.Println("✓ 端口映射添加成功!")
+	clients, _, err := internetgateway1.NewWANIPConnection1Clients()
+	if err != nil {
+		return fmt.Errorf("获取UPnP客户端失败: %v", err)
+	}
+
+	if len(clients) == 0 {
+		return fmt.Errorf("未找到可用的UPnP网关设备")
+	}
+
+	// 尝试所有客户端，忽略718冲突错误
+	for i, client := range clients {
+		err = client.AddPortMapping(
+			"",           // NewRemoteHost
+			externalPort, // NewExternalPort
+			protocol,     // NewProtocol
+			internalPort, // NewInternalPort
+			localIP,      // NewInternalClient
+			true,         // NewEnabled
+			description,  // NewPortMappingDescription
+			uint32(0),    // NewLeaseDuration (0表示永久)
+		)
+
+		if err == nil {
+			fmt.Printf("✓ 端口映射添加成功!\n")
 			return nil
+		}
+
+		// 只记录非冲突错误
+		if err.Error() != "SOAP fault. Code: s:Client | Explanation: UPnPError | Detail: <UPnPError xmlns=\"urn:schemas-upnp-org:control-1-0\"><errorCode>718</errorCode><errorDescription>ConflictInMappingEntry</errorDescription></UPnPError>" {
+			log.Printf("客户端 %d 失败: %v\n", i+1, err)
 		}
 	}
 
-	// 尝试 IGDv2 的 PPP 连接
-	clients2, _, err := internetgateway2.NewWANPPPConnection1Clients()
-	if err == nil && len(clients2) > 0 {
-		fmt.Println("使用 Internet Gateway Device v2 (PPP)")
-		for _, client := range clients2 {
-			err = client.AddPortMapping(
-				"",
-				externalPort,
-				protocol,
-				internalPort,
-				localIP,
-				true,
-				description,
-				uint32(0),
-			)
-			if err != nil {
-				log.Printf("IGDv2 PPP 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			fmt.Println("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	// 尝试 IGDv1
-	clients1, _, err := internetgateway1.NewWANIPConnection1Clients()
-	if err == nil && len(clients1) > 0 {
-		fmt.Println("使用 Internet Gateway Device v1")
-		for _, client := range clients1 {
-			err = client.AddPortMapping(
-				"",
-				externalPort,
-				protocol,
-				internalPort,
-				localIP,
-				true,
-				description,
-				uint32(0),
-			)
-			if err != nil {
-				log.Printf("IGDv1 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			fmt.Println("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	// 尝试 IGDv1 的 PPP 连接
-	clients1ppp, _, err := internetgateway1.NewWANPPPConnection1Clients()
-	if err == nil && len(clients1ppp) > 0 {
-		fmt.Println("使用 Internet Gateway Device v1 (PPP)")
-		for _, client := range clients1ppp {
-			err = client.AddPortMapping(
-				"",
-				externalPort,
-				protocol,
-				internalPort,
-				localIP,
-				true,
-				description,
-				uint32(0),
-			)
-			if err != nil {
-				log.Printf("IGDv1 PPP 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			fmt.Println("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	return fmt.Errorf("未找到可用的UPnP网关设备或所有尝试均失败")
+	return fmt.Errorf("所有客户端均失败")
 }
 
 // deletePortMapping 删除端口映射
 func deletePortMapping(externalPort uint16, protocol string) error {
-	// 尝试 IGDv2
-	clients, _, err := internetgateway2.NewWANIPConnection2Clients()
-	if err == nil && len(clients) > 0 {
-		for _, client := range clients {
-			err = client.DeletePortMapping("", externalPort, protocol)
-			if err == nil {
-				fmt.Println("✓ 端口映射删除成功!")
-				return nil
-			}
-		}
+	clients, _, err := internetgateway1.NewWANIPConnection1Clients()
+	if err != nil {
+		return fmt.Errorf("获取UPnP客户端失败: %v", err)
 	}
 
-	// 尝试 IGDv1
-	clients1, _, err := internetgateway1.NewWANIPConnection1Clients()
-	if err == nil && len(clients1) > 0 {
-		for _, client := range clients1 {
-			err = client.DeletePortMapping("", externalPort, protocol)
-			if err == nil {
-				fmt.Println("✓ 端口映射删除成功!")
-				return nil
-			}
+	for _, client := range clients {
+		err = client.DeletePortMapping("", externalPort, protocol)
+		if err == nil {
+			fmt.Printf("✓ 端口 %d (%s) 映射删除成功!\n", externalPort, protocol)
+			return nil
 		}
 	}
 
@@ -166,26 +91,26 @@ func deletePortMapping(externalPort uint16, protocol string) error {
 }
 
 func main() {
-	// 添加 TCP 333 端口映射
+	// 添加 TCP 端口映射
 	fmt.Println("========== 添加 TCP 端口映射 ==========")
-	err := addPortMapping(3334, 3334, "TCP", "Custom Port 333 TCP")
+	err := addPortMapping(3335, 3333, "TCP", "Custom Port 3334 TCP")
 	if err != nil {
 		log.Printf("添加 TCP 端口映射失败: %v\n", err)
 	}
 
 	time.Sleep(1 * time.Second)
 
-	// 添加 UDP 333 端口映射
+	// 添加 UDP 端口映射
 	fmt.Println("\n========== 添加 UDP 端口映射 ==========")
-	err = addPortMapping(3334, 3334, "UDP", "Custom Port 333 UDP")
+	err = addPortMapping(3335, 3333, "UDP", "Custom Port 3333 UDP")
 	if err != nil {
 		log.Printf("添加 UDP 端口映射失败: %v\n", err)
 	}
 
 	fmt.Println("\n端口映射配置完成!")
 
-	// 如果需要删除端口映射，可以使用以下代码:
-	// fmt.Println("\n========== 删除端口映射 ==========")
-	// deletePortMapping(333, "TCP")
-	// deletePortMapping(333, "UDP")
+	// 删除端口映射
+	fmt.Println("\n========== 删除端口映射 ==========")
+	deletePortMapping(3333, "TCP")
+	deletePortMapping(3334, "UDP")
 }
