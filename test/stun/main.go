@@ -81,7 +81,7 @@ func main() {
 		}
 	}
 
-	// 3. 发现并连接 UPnP 网关
+	// 2. 发现并连接 UPnP 网关
 	fmt.Println("🔍 正在搜索 UPnP 网关设备...")
 	if err := discoverUPnPGateway(); err != nil {
 		log.Printf("⚠️  UPnP 发现失败: %v\n", err)
@@ -90,17 +90,17 @@ func main() {
 		fmt.Println("✓ UPnP 网关已连接")
 	}
 
-	// 4. 初始化UDP连接用于STUN
+	// 3. 初始化UDP连接用于STUN
 	initUDPConnection(tunnels[0].UDPPort)
 
-	// 5. 选择最快的STUN服务器
+	// 4. 选择最快的STUN服务器
 	fmt.Println("\n正在测试 STUN 服务器...")
 	selectBestSTUN()
 
-	// 6. 获取公网地址
+	// 5. 获取公网地址
 	getPublicAddress()
 
-	// 7. 检查是否真的获取到了公网IP
+	// 6. 检查是否真的获取到了公网IP
 	if !isPublicIP(publicIP) {
 		fmt.Printf("\n⚠️  警告: 检测到多层NAT!\n")
 		fmt.Printf("   路由器WAN口IP: %s (这是内网IP)\n", publicIP)
@@ -117,31 +117,23 @@ func main() {
 		}
 	}
 
-	// 8. 使用UPnP为TCP端口创建映射（支持随机端口）
+	// 7. 使用UPnP为TCP端口创建映射（支持自动重试其他端口）
 	for i := range tunnels {
 		if tunnels[i].Protocol == "TCP" {
-			// 如果ExternalPort为0，使用随机端口
-			if tunnels[i].ExternalPort == 0 {
-				// 使用1024-65535之间的随机端口
-				tunnels[i].ExternalPort = 10000 + (int(time.Now().Unix()) % 55535)
-			}
-
 			if err := createUPnPMapping(&tunnels[i]); err != nil {
 				log.Printf("⚠️  UPnP 映射失败: %v\n", err)
 
 				// 尝试使用其他端口
 				fmt.Println("\n🔄 尝试使用其他可用端口...")
-				success := false
 				for port := tunnels[i].ExternalPort + 1; port < tunnels[i].ExternalPort+100; port++ {
 					tunnels[i].ExternalPort = port
 					if err := createUPnPMapping(&tunnels[i]); err == nil {
 						fmt.Printf("✅ 成功使用替代端口: %d\n", port)
-						success = true
 						break
 					}
 				}
 
-				if !success {
+				if !tunnelStats[tunnels[i].Name].UPnPEnabled {
 					log.Printf("提示: 需要手动在路由器配置端口转发 %d -> %s:%d\n",
 						tunnels[i].ExternalPort, localIP, tunnels[i].LocalPort)
 				}
@@ -149,18 +141,18 @@ func main() {
 		}
 	}
 
-	// 9. 启动心跳保持NAT映射
+	// 8. 启动心跳保持NAT映射
 	go keepNATMapping()
 	go keepUPnPMappings(tunnels)
 
-	// 10. 为每个隧道启动服务
+	// 9. 为每个隧道启动服务
 	for _, tunnel := range tunnels {
 		startTunnel(tunnel)
 	}
 
 	time.Sleep(500 * time.Millisecond)
 
-	// 11. 显示穿透信息
+	// 10. 显示穿透信息
 	displayTunnelInfo(tunnels)
 
 	// 保持运行
@@ -215,13 +207,12 @@ func inRange(ip net.IP, start, end string) bool {
 	return false
 }
 
-// 通过外部服务获取真实公网IP（优先IPv4）
+// 通过外部服务获取真实公网IP
 func getRealPublicIP() string {
 	services := []string{
 		"https://api.ipify.org",
-		"https://ipv4.icanhazip.com",
-		"https://api.ip.sb/ip",
-		"https://ifconfig.me/ip",
+		"https://ifconfig.me",
+		"https://icanhazip.com",
 	}
 
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -233,13 +224,11 @@ func getRealPublicIP() string {
 		}
 		defer resp.Body.Close()
 
-		buf := make([]byte, 128)
+		buf := make([]byte, 64)
 		n, _ := resp.Body.Read(buf)
 		ip := strings.TrimSpace(string(buf[:n]))
 
-		// 解析IP并检查是否是IPv4
-		parsedIP := net.ParseIP(ip)
-		if parsedIP != nil && parsedIP.To4() != nil {
+		if net.ParseIP(ip) != nil {
 			return ip
 		}
 	}
@@ -483,25 +472,20 @@ func getPublicAddress() {
 	udpConn.SetReadDeadline(time.Now().Add(3 * time.Second))
 
 	buf := make([]byte, 1024)
-	n, _, err := udpConn.ReadFromUDP(buf)
+	n, _, _ := udpConn.ReadFromUDP(buf)
 
-	if err == nil && n > 0 {
-		response := &stun.Message{Raw: buf[:n]}
-		if response.Decode() == nil {
-			var xorAddr stun.XORMappedAddress
-			if xorAddr.GetFrom(response) == nil {
-				if publicIP == "" {
-					publicIP = xorAddr.IP.String()
-				}
-				publicUDPPort = xorAddr.Port
-				fmt.Printf("✓ UDP 公网端口: %d\n", publicUDPPort)
-			}
-		}
-	}
+	response := &stun.Message{Raw: buf[:n]}
+	response.Decode()
 
-	if publicUDPPort == 0 {
-		fmt.Printf("⚠️  STUN 查询失败，UDP端口未知\n")
+	var xorAddr stun.XORMappedAddress
+	xorAddr.GetFrom(response)
+
+	if publicIP == "" {
+		publicIP = xorAddr.IP.String()
 	}
+	publicUDPPort = xorAddr.Port
+
+	fmt.Printf("✓ UDP 公网端口: %d\n", publicUDPPort)
 
 	udpConn.SetReadDeadline(time.Time{})
 }
@@ -517,23 +501,16 @@ func keepNATMapping() {
 }
 
 func startTunnel(config TunnelConfig) {
-	mu.Lock()
-	stats, ok := tunnelStats[config.Name]
-	if !ok {
-		// 如果统计信息不存在，创建一个
-		stats = &TunnelStats{
-			Protocol:   config.Protocol,
-			LocalAddr:  fmt.Sprintf("%s:%d", localIP, config.LocalPort),
-			CreateTime: time.Now(),
-			LastActive: time.Now(),
-		}
-		tunnelStats[config.Name] = stats
+	stats := &TunnelStats{
+		Protocol:   config.Protocol,
+		PublicAddr: fmt.Sprintf("%s:%d", publicIP, config.ExternalPort),
+		LocalAddr:  fmt.Sprintf("%s:%d", localIP, config.LocalPort),
+		CreateTime: time.Now(),
+		LastActive: time.Now(),
 	}
 
-	// 更新公网地址（可能在UPnP映射时已经更新）
-	if stats.PublicAddr == "" {
-		stats.PublicAddr = fmt.Sprintf("%s:%d", publicIP, config.ExternalPort)
-	}
+	mu.Lock()
+	tunnelStats[config.Name] = stats
 	mu.Unlock()
 
 	if config.Protocol == "TCP" {

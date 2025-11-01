@@ -1,0 +1,687 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"net"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/huin/goupnp/dcps/internetgateway2"
+	"github.com/pion/stun"
+)
+
+// ============ 配置 ============
+const (
+	LocalServicePort = 3333 // 本地 HTTP 服务端口
+)
+
+var (
+	// TCP STUN 服务器列表
+	stunServers = []string{
+		"52.24.174.49:3478",
+		"35.158.233.7:3478",
+		"69.20.59.115:3478",
+		"54.197.117.0:3478",
+		"35.177.202.92:3478",
+		"203.56.112.226:3478",
+		"80.155.54.123:3478",
+		"52.57.137.123:3478",
+		"172.233.245.118:3478",
+		"176.9.24.184:3478",
+		"3.78.237.53:3478",
+		"194.149.74.158:3478",
+		"23.21.92.55:3478",
+		"52.52.70.85:3478",
+		"108.163.134.186:3478",
+		"66.228.54.23:3478",
+		"34.74.124.204:3478",
+		"217.146.224.74:3478",
+		"24.204.48.11:3478",
+		"193.22.17.97:3478",
+	}
+
+	publicIP         string
+	routerIP         string
+	stunMappedPort   int // 运营商 NAT 分配的端口
+	localIP          string
+	bestSTUN         string
+	stunConn         net.Conn
+	upnpClient       *internetgateway2.WANIPConnection1
+	isDoubleNAT      bool
+	natType          string
+	routerMappedPort int // 路由器 UPnP 映射的外部端口
+)
+
+func main() {
+	fmt.Println("=== TCP STUN + UPnP 双层 NAT 穿透 ===\n")
+	localIP = getLocalIP()
+
+	// 步骤 1: 启动本地服务
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("📡 步骤 1: 启动本地 HTTP 服务")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	startLocalHTTPService(LocalServicePort)
+
+	// 步骤 2: 选择最快 STUN 服务器
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("🔍 步骤 2: 测试 TCP STUN 服务器")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	selectBestSTUN()
+
+	// 步骤 3: TCP STUN 获取运营商 NAT 映射
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("🌐 步骤 3: 获取运营商 NAT 映射端口")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	if !getISPNATMapping() {
+		log.Fatal("❌ 获取运营商 NAT 映射失败")
+	}
+
+	// 步骤 4: 检测 NAT 类型
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("🔍 步骤 4: 检测 NAT 类型")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	detectNATType()
+
+	// 步骤 5: UPnP 映射本地端口到运营商端口
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("🔧 步骤 5: UPnP 端口映射（同步到运营商端口）")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	setupSyncedUPnPMapping()
+
+	// 步骤 6: 保持映射活跃
+	go keepMappingAlive()
+
+	// 显示最终信息
+	displayFinalInfo()
+
+	select {}
+}
+
+// ========== 步骤 1: 启动本地服务 ==========
+func startLocalHTTPService(port int) {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+		natStatus := "单层 NAT"
+		accessURL := fmt.Sprintf("http://%s:%d", publicIP, routerMappedPort)
+
+		if isDoubleNAT {
+			natStatus = "双层 NAT (已通过端口同步穿透)"
+			if routerMappedPort == stunMappedPort {
+				accessURL = fmt.Sprintf("http://%s:%d", publicIP, stunMappedPort)
+			}
+		}
+
+		html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>双层 NAT 穿透成功！</title>
+	<style>
+		body {
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			max-width: 900px;
+			margin: 50px auto;
+			padding: 30px;
+			background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
+			color: white;
+		}
+		.card {
+			background: rgba(255,255,255,0.98);
+			color: #333;
+			padding: 40px;
+			border-radius: 16px;
+			box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+		}
+		h1 { color: #667eea; margin-bottom: 30px; }
+		.status { 
+			background: linear-gradient(135deg, #10b981 0%%, #059669 100%%);
+			color: white; 
+			padding: 20px; 
+			border-radius: 12px; 
+			margin: 25px 0;
+			box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+		}
+		.success {
+			background: linear-gradient(135deg, #3b82f6 0%%, #2563eb 100%%);
+			color: white;
+			padding: 20px;
+			border-radius: 12px;
+			margin: 25px 0;
+		}
+		.info { 
+			background: #f8fafc; 
+			padding: 20px; 
+			border-radius: 8px; 
+			margin: 15px 0;
+			border-left: 4px solid #667eea;
+		}
+		.badge {
+			display: inline-block;
+			background: #667eea;
+			color: white;
+			padding: 4px 12px;
+			border-radius: 12px;
+			font-size: 12px;
+			font-weight: bold;
+			margin-left: 10px;
+		}
+		.port-map {
+			background: #1e293b;
+			color: #10b981;
+			padding: 15px;
+			border-radius: 8px;
+			font-family: 'Courier New', monospace;
+			margin: 15px 0;
+		}
+	</style>
+</head>
+<body>
+	<div class="card">
+		<h1>🎉 双层 NAT 穿透成功！</h1>
+		<div class="status">
+			<strong>✅ 连接状态:</strong> 已建立 <span class="badge">TCP</span><br>
+			<strong>📡 客户端 IP:</strong> %s<br>
+			<strong>⏰ 访问时间:</strong> %s<br>
+			<strong>🌐 NAT 环境:</strong> %s<br>
+			<strong>🔍 NAT 类型:</strong> %s
+		</div>
+		%s
+		<div class="info">
+			<h3>💡 端口映射路径</h3>
+			<div class="port-map">
+互联网访问: %s<br>
+   ↓<br>
+[运营商 NAT] %s:%d<br>
+   ↓<br>
+[家庭路由器] %s:%d<br>
+   ↓<br>
+[本机服务] %s:%d
+			</div>
+		</div>
+		<div class="info">
+			<h3>🔧 技术原理</h3>
+			<p><strong>TCP STUN 探测:</strong> 获取运营商 NAT 分配的端口 %d<br>
+			<strong>UPnP 端口同步:</strong> 路由器外部端口 %d → 本地 %d<br>
+			<strong>双层穿透:</strong> 保持 TCP 连接活跃，维持两层 NAT 映射</p>
+		</div>
+	</div>
+</body>
+</html>`,
+			r.RemoteAddr,
+			time.Now().Format("2006-01-02 15:04:05"),
+			natStatus,
+			natType,
+			func() string {
+				if isDoubleNAT && routerMappedPort == stunMappedPort {
+					return `<div class="success">
+						<strong>✅ 双层 NAT 已成功穿透！</strong><br>
+						通过端口同步技术，路由器端口与运营商端口保持一致。<br>
+						外网可以通过 ` + accessURL + ` 访问本机服务。
+					</div>`
+				} else if isDoubleNAT {
+					return `<div class="success">
+						<strong>⚠️ 端口不完全同步</strong><br>
+						路由器端口 (` + fmt.Sprintf("%d", routerMappedPort) + `) 与运营商端口 (` + fmt.Sprintf("%d", stunMappedPort) + `) 不一致。<br>
+						可能需要手动配置路由器端口转发。
+					</div>`
+				}
+				return ""
+			}(),
+			accessURL,
+			publicIP, stunMappedPort,
+			routerIP, routerMappedPort,
+			localIP, LocalServicePort,
+			stunMappedPort,
+			routerMappedPort,
+			LocalServicePort,
+		)
+
+		w.Write([]byte(html))
+		log.Printf("✅ [HTTP] 收到请求: %s %s from %s\n", r.Method, r.URL.Path, r.RemoteAddr)
+	})
+
+	go func() {
+		addr := fmt.Sprintf("0.0.0.0:%d", port)
+		fmt.Printf("✅ HTTP 服务已启动: %s\n", addr)
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			log.Fatalf("❌ HTTP 服务器启动失败: %v\n", err)
+		}
+	}()
+
+	time.Sleep(300 * time.Millisecond)
+}
+
+// ========== 步骤 2: 选择最快 STUN 服务器 ==========
+func selectBestSTUN() {
+	type result struct {
+		server string
+		delay  time.Duration
+	}
+
+	results := make(chan result, len(stunServers))
+	var wg sync.WaitGroup
+
+	for _, server := range stunServers {
+		wg.Add(1)
+		go func(srv string) {
+			defer wg.Done()
+
+			start := time.Now()
+			conn, err := net.DialTimeout("tcp", srv, 3*time.Second)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
+			_, err = conn.Write(msg.Raw)
+			if err != nil {
+				return
+			}
+
+			conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+			buf := make([]byte, 1024)
+			n, err := conn.Read(buf)
+			if err != nil || n == 0 {
+				return
+			}
+
+			delay := time.Since(start)
+			fmt.Printf("  ✓ %s - %dms\n", srv, delay.Milliseconds())
+			results <- result{server: srv, delay: delay}
+		}(server)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	var bestDelay time.Duration = time.Hour
+	for res := range results {
+		if res.delay < bestDelay {
+			bestDelay = res.delay
+			bestSTUN = res.server
+		}
+	}
+
+	if bestSTUN == "" {
+		log.Fatal("❌ 无法连接任何 TCP STUN 服务器")
+	}
+	fmt.Printf("🎯 选择最快的: %s (%dms)\n", bestSTUN, bestDelay.Milliseconds())
+}
+
+// ========== 步骤 3: 获取运营商 NAT 映射端口 ==========
+func getISPNATMapping() bool {
+	conn, err := net.DialTimeout("tcp", bestSTUN, 5*time.Second)
+	if err != nil {
+		log.Printf("❌ 连接 STUN 服务器失败: %v\n", err)
+		return false
+	}
+
+	stunConn = conn
+	localPort := conn.LocalAddr().(*net.TCPAddr).Port
+	fmt.Printf("✅ TCP 连接已建立: %s (本地端口: %d)\n", bestSTUN, localPort)
+
+	msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
+	_, err = stunConn.Write(msg.Raw)
+	if err != nil {
+		log.Printf("❌ 发送 STUN 请求失败: %v\n", err)
+		return false
+	}
+
+	stunConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	buf := make([]byte, 1024)
+	n, err := stunConn.Read(buf)
+	stunConn.SetReadDeadline(time.Time{})
+
+	if err != nil || n == 0 {
+		log.Printf("❌ 读取 STUN 响应失败: %v\n", err)
+		return false
+	}
+
+	response := &stun.Message{Raw: buf[:n]}
+	if err := response.Decode(); err != nil {
+		log.Printf("❌ 解析 STUN 响应失败: %v\n", err)
+		return false
+	}
+
+	var xorAddr stun.XORMappedAddress
+	if err := xorAddr.GetFrom(response); err != nil {
+		log.Printf("❌ 获取映射地址失败: %v\n", err)
+		return false
+	}
+
+	publicIP = xorAddr.IP.String()
+	stunMappedPort = xorAddr.Port
+
+	fmt.Printf("✅ 运营商 NAT 映射获取成功！\n")
+	fmt.Printf("   公网 IP: %s\n", publicIP)
+	fmt.Printf("   🔑 映射端口: %d (这是关键！)\n", stunMappedPort)
+	fmt.Printf("   本地端口: %d\n", localPort)
+
+	return true
+}
+
+// ========== 步骤 4: 检测 NAT 类型 ==========
+func detectNATType() {
+	conn, err := net.DialTimeout("tcp", bestSTUN, 3*time.Second)
+	if err != nil {
+		natType = "检测失败"
+		fmt.Println("⚠️  NAT 类型检测失败")
+		return
+	}
+	defer conn.Close()
+
+	msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
+	conn.Write(msg.Raw)
+
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	buf := make([]byte, 1024)
+	n, _ := conn.Read(buf)
+
+	if n == 0 {
+		natType = "检测失败"
+		fmt.Println("⚠️  NAT 类型检测失败")
+		return
+	}
+
+	response := &stun.Message{Raw: buf[:n]}
+	response.Decode()
+
+	var xorAddr stun.XORMappedAddress
+	xorAddr.GetFrom(response)
+
+	ip2 := xorAddr.IP.String()
+	port2 := xorAddr.Port
+
+	if ip2 == publicIP && port2 == stunMappedPort {
+		natType = "Endpoint-Independent (完美)"
+		fmt.Println("✅ NAT 类型: Endpoint-Independent Mapping")
+		fmt.Println("   不同连接使用相同的公网端口，最适合穿透！")
+	} else {
+		natType = "Address-Dependent (一般)"
+		fmt.Println("⚠️  NAT 类型: Address-Dependent Mapping")
+		fmt.Println("   不同目标使用不同端口，需要保持连接活跃")
+	}
+}
+
+// ========== 步骤 5: UPnP 端口同步映射 ==========
+func setupSyncedUPnPMapping() bool {
+	fmt.Println("🔍 正在发现 UPnP 网关...")
+
+	clients, _, err := internetgateway2.NewWANIPConnection1Clients()
+	if err != nil || len(clients) == 0 {
+		log.Printf("❌ UPnP 发现失败: %v\n", err)
+		log.Println("💡 可能原因：路由器未开启 UPnP")
+		return false
+	}
+
+	upnpClient = clients[0]
+	fmt.Println("✅ UPnP 网关已连接")
+
+	externalIP, err := upnpClient.GetExternalIPAddress()
+	if err != nil {
+		log.Printf("❌ 获取路由器外部 IP 失败: %v\n", err)
+		return false
+	}
+	routerIP = externalIP
+	fmt.Printf("✅ 路由器外部 IP: %s\n", routerIP)
+
+	if routerIP != publicIP {
+		isDoubleNAT = true
+		fmt.Println("\n🎯 ========== 检测到双层 NAT，启用端口同步策略 ========== 🎯")
+		fmt.Printf("   STUN 公网 IP:     %s (运营商 NAT)\n", publicIP)
+		fmt.Printf("   路由器外部 IP:    %s (内网网关)\n", routerIP)
+		fmt.Printf("   运营商分配端口:   %d ⬅ 关键！\n", stunMappedPort)
+		fmt.Printf("   本机内网 IP:      %s\n", localIP)
+		fmt.Println("\n💡 穿透策略:")
+		fmt.Printf("   1. 路由器 UPnP 映射：外部端口 %d → 本地 %s:%d\n", stunMappedPort, localIP, LocalServicePort)
+		fmt.Println("   2. 保持 TCP STUN 连接活跃，维持运营商 NAT 映射")
+		fmt.Printf("   3. 外网访问: http://%s:%d\n", publicIP, stunMappedPort)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	}
+
+	fmt.Println("\n🧹 清理可能冲突的端口映射...")
+	cleanupConflictingMappings(upnpClient, stunMappedPort)
+
+	fmt.Println("\n📡 正在创建同步端口映射...")
+	fmt.Printf("   目标：外部端口 %d → 本地 %s:%d\n", stunMappedPort, localIP, LocalServicePort)
+
+	err = upnpClient.AddPortMapping(
+		"",
+		uint16(stunMappedPort),
+		"TCP",
+		uint16(LocalServicePort),
+		localIP,
+		true,
+		"TCP-STUN-Synced",
+		86400,
+	)
+
+	if err != nil {
+		log.Printf("❌ 端口 %d 映射失败: %v\n", stunMappedPort, err)
+
+		fmt.Printf("\n💡 尝试运营商端口附近的端口 (%d±50)...\n", stunMappedPort)
+		for offset := 0; offset <= 50; offset++ {
+			for _, port := range []int{stunMappedPort + offset, stunMappedPort - offset} {
+				if port < 1024 || port > 65535 {
+					continue
+				}
+
+				if port%10 == 0 {
+					fmt.Printf("   尝试中... %d\r", port)
+				}
+
+				upnpClient.DeletePortMapping("", uint16(port), "TCP")
+
+				err = upnpClient.AddPortMapping(
+					"",
+					uint16(port),
+					"TCP",
+					uint16(LocalServicePort),
+					localIP,
+					true,
+					fmt.Sprintf("TCP-STUN-%d", port),
+					86400,
+				)
+
+				if err == nil {
+					routerMappedPort = port
+					fmt.Printf("\n✅ 找到可用端口: %d → 本地 %d\n", port, LocalServicePort)
+
+					if port == stunMappedPort {
+						fmt.Println("🎉 完美！端口完全同步！")
+					} else {
+						fmt.Printf("⚠️  端口不完全同步（差距: %d）\n", abs(port-stunMappedPort))
+						fmt.Println("   可能需要手动配置路由器端口转发")
+					}
+					return true
+				}
+			}
+		}
+
+		fmt.Println("\n❌ 同步端口映射失败")
+		fmt.Println("💡 可能原因:")
+		fmt.Println("   1. 路由器 UPnP 权限限制")
+		fmt.Println("   2. 端口被其他服务占用")
+		fmt.Println("   3. 路由器固件不支持外部端口自定义")
+		return false
+	}
+
+	routerMappedPort = stunMappedPort
+	fmt.Printf("✅ 端口同步成功！外部端口: %d\n", routerMappedPort)
+	fmt.Println("🎉 双层 NAT 穿透完成！")
+
+	if isDoubleNAT {
+		fmt.Printf("\n✨ 外网访问地址: http://%s:%d\n", publicIP, stunMappedPort)
+	}
+
+	return true
+}
+
+// ========== 步骤 6: 保持映射活跃 ==========
+func keepMappingAlive() {
+	ticker := time.NewTicker(25 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if stunConn == nil {
+			conn, err := net.DialTimeout("tcp", bestSTUN, 5*time.Second)
+			if err != nil {
+				log.Printf("⚠️  TCP STUN 重连失败: %v\n", err)
+				continue
+			}
+			stunConn = conn
+			log.Println("🔄 TCP STUN 连接已重建")
+		}
+
+		msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
+		_, err := stunConn.Write(msg.Raw)
+		if err != nil {
+			log.Printf("⚠️  TCP STUN 心跳失败: %v\n", err)
+			stunConn.Close()
+			stunConn = nil
+			continue
+		}
+
+		stunConn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		buf := make([]byte, 1024)
+		n, err := stunConn.Read(buf)
+		stunConn.SetReadDeadline(time.Time{})
+
+		if err != nil || n == 0 {
+			log.Printf("⚠️  TCP STUN 响应失败: %v\n", err)
+			stunConn.Close()
+			stunConn = nil
+			continue
+		}
+
+		response := &stun.Message{Raw: buf[:n]}
+		if response.Decode() == nil {
+			var xorAddr stun.XORMappedAddress
+			if xorAddr.GetFrom(response) == nil {
+				currentPort := xorAddr.Port
+				if currentPort != stunMappedPort {
+					log.Printf("⚠️  警告：运营商端口已变化 %d → %d\n", stunMappedPort, currentPort)
+					stunMappedPort = currentPort
+				}
+			}
+		}
+
+		log.Printf("🔄 双层 NAT 映射保活成功 (端口: %d)\n", stunMappedPort)
+	}
+}
+
+// ========== 显示最终信息 ==========
+func displayFinalInfo() {
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("📊 双层 NAT 穿透结果")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+	if isDoubleNAT {
+		fmt.Println("\n🎯 双层 NAT 环境")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("🌐 真实公网 IP:        %s\n", publicIP)
+		fmt.Printf("🔑 运营商分配端口:     %d ⬅ TCP STUN 探测\n", stunMappedPort)
+		fmt.Printf("🏠 路由器外部 IP:      %s\n", routerIP)
+		fmt.Printf("🔧 路由器映射端口:     %d ⬅ UPnP 配置\n", routerMappedPort)
+		fmt.Printf("💻 本机内网 IP:        %s\n", localIP)
+		fmt.Printf("📡 本地服务端口:       %d\n", LocalServicePort)
+
+		fmt.Println("\n🔄 端口映射链路:")
+		fmt.Printf("   互联网 → %s:%d (运营商 NAT)\n", publicIP, stunMappedPort)
+		fmt.Printf("          ↓\n")
+		fmt.Printf("   %s:%d (家庭路由器)\n", routerIP, routerMappedPort)
+		fmt.Printf("          ↓\n")
+		fmt.Printf("   %s:%d (本机服务)\n", localIP, LocalServicePort)
+
+		if routerMappedPort == stunMappedPort {
+			fmt.Println("\n✅ 穿透状态: 成功！")
+			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			fmt.Printf("🌍 外网访问地址: http://%s:%d\n", publicIP, stunMappedPort)
+			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			fmt.Println("\n💡 技术说明:")
+			fmt.Println("   • TCP STUN 探测到运营商 NAT 端口")
+			fmt.Println("   • UPnP 成功同步路由器端口")
+			fmt.Println("   • 保持心跳维持两层 NAT 映射")
+		} else {
+			fmt.Println("\n⚠️  穿透状态: 部分成功")
+			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			fmt.Printf("⚠️  端口未完全同步（差距: %d）\n", abs(routerMappedPort-stunMappedPort))
+			fmt.Println("\n💡 可能的解决方案:")
+			fmt.Println("   1. 手动在路由器配置端口转发:")
+			fmt.Printf("      外部端口: %d → 内网 %s:%d\n", stunMappedPort, localIP, routerMappedPort)
+			fmt.Println("   2. 检查路由器 UPnP 权限设置")
+			fmt.Println("   3. 尝试重启路由器后重新运行")
+		}
+	} else {
+		fmt.Println("\n✅ 单层 NAT 环境")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("🌐 公网 IP:            %s\n", publicIP)
+		fmt.Printf("🔧 映射端口:           %d\n", routerMappedPort)
+		fmt.Printf("💻 本机内网 IP:        %s\n", localIP)
+		fmt.Printf("📡 本地服务端口:       %d\n", LocalServicePort)
+		fmt.Println("\n🌍 外网访问地址: http://%s:%d", publicIP, routerMappedPort)
+	}
+
+	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("🔧 维护信息")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("✓ TCP STUN 连接保活: 25秒/次")
+	fmt.Println("✓ UPnP 映射租期: 24小时")
+	fmt.Println("✓ NAT 类型:", natType)
+	fmt.Println("\n💡 注意事项:")
+	fmt.Println("   • 保持程序运行以维持 NAT 映射")
+	fmt.Println("   • 重启路由器后需要重新运行")
+	fmt.Println("   • 如果公网 IP 变化，需要重新穿透")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+}
+
+// ========== 辅助函数 ==========
+
+// 获取本机内网 IP
+func getLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "127.0.0.1"
+	}
+
+	for _, addr := range addrs {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return "127.0.0.1"
+}
+
+// 清理冲突的端口映射
+func cleanupConflictingMappings(client *internetgateway2.WANIPConnection1, targetPort int) {
+	// 尝试删除目标端口的现有映射
+	err := client.DeletePortMapping("", uint16(targetPort), "TCP")
+	if err == nil {
+		fmt.Printf("🧹 已清理端口 %d 的旧映射\n", targetPort)
+	}
+
+	// 清理附近可能冲突的端口
+	for offset := 1; offset <= 5; offset++ {
+		for _, port := range []int{targetPort + offset, targetPort - offset} {
+			if port > 1024 && port < 65536 {
+				client.DeletePortMapping("", uint16(port), "TCP")
+			}
+		}
+	}
+}
+
+// 绝对值函数
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
