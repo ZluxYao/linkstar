@@ -576,8 +576,7 @@ func setupRouterMapping() {
 	if err != nil || len(clients) == 0 {
 		log.Printf("❌ UPnP 发现失败: %v\n", err)
 		log.Println("💡 请手动在路由器配置端口转发:")
-		log.Printf("   外部端口: %d → 内网IP: %s 内网端口: %d\n",
-			stunLocalPort, localIP, stunLocalPort) // ✅ 改为 stunLocalPort
+		log.Printf("   外部端口: %d → 内网IP: %s 内网端口: %d\n", stunMappedPort, localIP, stunLocalPort)
 		return
 	}
 
@@ -599,36 +598,35 @@ func setupRouterMapping() {
 		fmt.Println("\n🎯 ========== 检测到双层 NAT 环境 ==========")
 		fmt.Printf("   真实公网IP:      %s (运营商分配)\n", publicIP)
 		fmt.Printf("   路由器WAN口IP:   %s (运营商内网)\n", routerWanIP)
-		fmt.Printf("   运营商NAT端口:   %d (外网访问)\n", stunMappedPort)
-		fmt.Printf("   STUN本地端口:    %d (NAT实际映射)\n", stunLocalPort)
+		fmt.Printf("   运营商NAT端口:   %d\n", stunMappedPort)
 		fmt.Printf("   本机内网IP:      %s\n", localIP)
+		fmt.Printf("   STUN本地端口:    %d\n", stunLocalPort)
 		fmt.Println("==========================================\n")
 	} else {
 		fmt.Println("✅ 单层NAT环境（路由器直接获得公网IP）")
 	}
 
 	// 配置 UPnP 端口映射
-	// ✅ 关键修复：路由器应该映射 stunLocalPort，而不是 stunMappedPort
 	fmt.Printf("📡 正在配置 UPnP 映射: 外部 %d → 内网 %s:%d\n",
-		stunLocalPort, localIP, stunLocalPort) // ✅ 全部改为 stunLocalPort
+		stunMappedPort, localIP, stunLocalPort)
 
 	// 先删除可能存在的旧映射
 	for _, client := range upnpClients {
-		client.DeletePortMapping("", uint16(stunLocalPort), "TCP") // ✅ 改为 stunLocalPort
+		client.DeletePortMapping("", uint16(stunMappedPort), "TCP")
 	}
 
 	// 添加新映射
 	success := false
 	for i, client := range upnpClients {
 		err := client.AddPortMapping(
-			"",                    // NewRemoteHost
-			uint16(stunLocalPort), // NewExternalPort ✅ 改为 stunLocalPort
-			"TCP",                 // NewProtocol
-			uint16(stunLocalPort), // NewInternalPort
-			localIP,               // NewInternalClient
-			true,                  // NewEnabled
-			"Linkstar",            // NewPortMappingDescription
-			uint32(0),             // NewLeaseDuration (0=永久)
+			"",                     // NewRemoteHost
+			uint16(stunMappedPort), // NewExternalPort
+			"TCP",                  // NewProtocol
+			uint16(stunLocalPort),  // NewInternalPort
+			localIP,                // NewInternalClient
+			true,                   // NewEnabled
+			"Linkstar",             // NewPortMappingDescription
+			uint32(0),              // NewLeaseDuration (0=永久)
 		)
 
 		if err == nil {
@@ -636,6 +634,13 @@ func setupRouterMapping() {
 			success = true
 			break
 		}
+
+		// // 忽略718冲突错误（端口已映射）
+		// if err.Error() == "SOAP fault. Code: s:Client | Explanation: UPnPError | Detail: <UPnPError xmlns=\"urn:schemas-upnp-org:control-1-0\"><errorCode>718</errorCode><errorDescription>ConflictInMappingEntry</errorDescription></UPnPError>" {
+		// 	fmt.Printf("   ℹ️  客户端 %d: 端口已映射（忽略冲突）\n", i+1)
+		// 	success = true
+		// 	break
+		// }
 
 		fmt.Printf("   ✗ 客户端 %d 失败: %v\n", i+1, err)
 	}
@@ -646,7 +651,7 @@ func setupRouterMapping() {
 		fmt.Println("❌ UPnP 端口映射失败")
 		fmt.Println("💡 请手动配置路由器端口转发:")
 		fmt.Printf("   外部端口: %d → 内网IP: %s 内网端口: %d\n",
-			stunLocalPort, localIP, stunLocalPort) // ✅ 改为 stunLocalPort
+			stunMappedPort, localIP, stunLocalPort)
 	}
 }
 
