@@ -164,7 +164,7 @@ func startLocalHTTPService(port int) {
 		.info-item {
 			display: flex;
 			justify-content: space-between;
-			padding: 8px 0;
+			padding: 8px 0;   
 			border-bottom: 1px solid rgba(255,255,255,0.2);
 		}
 		.info-item:last-child { border-bottom: none; }
@@ -175,7 +175,7 @@ func startLocalHTTPService(port int) {
 			padding: 25px;
 			border-radius: 12px;
 			font-family: 'Monaco', 'Courier New', monospace;
-			margin: 20px 0;
+			margin: 20px 0;  
 			line-height: 1.8;
 			font-size: 0.9em;
 		}
@@ -565,6 +565,7 @@ func detectNATType() {
 		natType = "Address-Dependent (一般)"
 		fmt.Println("⚠️  NAT类型: Address-Dependent Mapping")
 		fmt.Println("   不同目标使用不同端口，需要保持连接活跃")
+
 	}
 }
 

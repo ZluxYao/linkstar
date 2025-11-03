@@ -34,6 +34,7 @@ func addPortMapping(externalPort, internalPort uint16, protocol, description str
 	}
 
 	fmt.Printf("本机IP: %s\n", localIP)
+
 	fmt.Printf("尝试添加端口映射: 外部端口 %d -> 内部端口 %d (%s)\n", externalPort, internalPort, protocol)
 
 	clients, _, err := internetgateway1.NewWANIPConnection1Clients()
@@ -47,6 +48,7 @@ func addPortMapping(externalPort, internalPort uint16, protocol, description str
 
 	// 尝试所有客户端，忽略718冲突错误
 	for i, client := range clients {
+		fmt.Printf("  设备位置: %s\n", client.Location)
 		err = client.AddPortMapping(
 			"",           // NewRemoteHost
 			externalPort, // NewExternalPort
