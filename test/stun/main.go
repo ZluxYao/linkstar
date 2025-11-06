@@ -27,7 +27,7 @@ var (
 		"stun.telnyx.com:3478",
 	}
 
-	publicIP       string                               // 真实公网IP
+	publicIP       string                               // 真实公网IP12试试现在辞职vvv半年内咩咩咩咩    /。。。。。。//
 	routerWanIP    string                               // 路由器WAN口IP
 	stunMappedPort int                                  // 运营商NAT分配的端口
 	localIP        string                               // 本机内网IP

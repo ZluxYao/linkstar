@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SRV 记录解析工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .input-hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .result-item {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .result-row:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .result-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .result-value {
+            color: #333;
+            font-family: 'Courier New', monospace;
+        }
+
+        .error {
+            background: #fee;
+            border-left-color: #f44336;
+            color: #c62828;
+        }
+
+        .success-message {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: #2e7d32;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .examples {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .examples h3 {
+            margin-bottom: 15px;
+            color: #333;
+            font-size: 18px;
+        }
+
+        .debug-info {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 8px;
+            font-size: 13px;
+        }
+
+        .debug-info pre {
+            margin: 10px 0 0 0;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+
+        .tools {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .tool-btn {
+            flex: 1;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            font-weight: 500;
+            color: #555;
+        }
+
+        .tool-btn:hover {
+            background: #e9ecef;
+            border-color: #667eea;
+        }
+
+        .example-item {
+            background: white;
+            padding: 12px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .example-item:hover {
+            border-color: #667eea;
+            transform: translateX(5px);
+        }
+
+        .example-item code {
+            color: #667eea;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>🔍 SRV 记录解析工具</h1>
+            <p class="subtitle">查询 DNS SRV 记录，获取服务地址和端口信息</p>
+
+            <form id="srvForm">
+                <div class="form-group">
+                    <label for="service">服务名称 (Service)</label>
+                    <input type="text" id="service" placeholder="例如: aa, minecraft, xmpp" required>
+                    <div class="input-hint">服务名称，如 minecraft、http、xmpp 等</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="proto">协议 (Protocol)</label>
+                    <input type="text" id="proto" placeholder="例如: tcp, udp" required>
+                    <div class="input-hint">通常为 tcp 或 udp</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="domain">域名 (Domain)</label>
+                    <input type="text" id="domain" placeholder="例如: istore, zlux.top" required>
+                    <div class="input-hint">要查询的域名</div>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">查询 SRV 记录</button>
+            </form>
+
+            <div class="tools">
+                <button class="tool-btn" onclick="testDNS()">🧪 测试 DNS 连接</button>
+                <button class="tool-btn" onclick="directQuery()">🔧 直接查询</button>
+            </div>
+
+            <div class="examples">
+                <h3>📝 示例记录（点击快速填充）</h3>
+                <div
+                    style="background: #fff3cd; padding: 12px; border-radius: 6px; margin-bottom: 15px; font-size: 13px;">
+                    ⚠️ <strong>重要提示</strong>: 域名必须是完整的域名（如 istore.zlux.top），不能只写子域名部分
+                </div>
+                <div class="example-item" onclick="fillExample('aa', 'tcp', 'istore.zlux.top')">
+                    <code>_aa._tcp.istore.zlux.top</code> - 优先级: 5, 端口: 12233, 目标: www.zlux.top
+                </div>
+                <div class="example-item" onclick="fillExample('aa', 'tcp', 'lucky.zlux.top')">
+                    <code>_aa._tcp.lucky.zlux.top</code> - 优先级: 5, 端口: 9058, 目标: lucky.zlux.top
+                </div>
+                <div class="example-item" onclick="fillExample('minecraft', 'tcp', 'sum.zlux.top')">
+                    <code>_minecraft._tcp.sum.zlux.top</code> - 优先级: 5, 端口: 9843, 目标: zlux.top
+                </div>
+                <div class="example-item" onclick="fillExample('xmpp-server', 'tcp', 'gmail.com')">
+                    <code>_xmpp-server._tcp.gmail.com</code> - 公共 SRV 记录示例
+                </div>
+            </div>
+
+            <div id="results"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8080/api/srv';
+        const DNS_TEST_URL = 'http://localhost:8080/api/dns-test';
+        const DIRECT_URL = 'http://localhost:8080/api/direct';
+
+        function fillExample(service, proto, domain) {
+            document.getElementById('service').value = service;
+            document.getElementById('proto').value = proto;
+            document.getElementById('domain').value = domain;
+        }
+
+        async function testDNS() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>正在测试 DNS 连接...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(DNS_TEST_URL);
+                const data = await response.json();
+
+                let html = '<div class="success-message">DNS 连接测试结果</div>';
+                for (const [domain, result] of Object.entries(data.results)) {
+                    if (result.error) {
+                        html += `
+                            <div class="result-item error">
+                                <strong>${domain}</strong><br>
+                                ❌ ${result.error}
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="result-item">
+                                <strong>${domain}</strong><br>
+                                ✅ 解析成功: ${result.ips.join(', ')}
+                            </div>
+                        `;
+                    }
+                }
+                resultsDiv.innerHTML = html;
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result-item error">
+                        <strong>❌ 测试失败</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        async function directQuery() {
+            const service = document.getElementById('service').value.trim();
+            const proto = document.getElementById('proto').value.trim();
+            const domain = document.getElementById('domain').value.trim();
+
+            if (!service || !proto || !domain) {
+                alert('请先填写查询参数');
+                return;
+            }
+
+            const query = `_${service}._${proto}.${domain}`;
+            const resultsDiv = document.getElementById('results');
+
+            resultsDiv.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>正在直接查询: ${query}</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${DIRECT_URL}?query=${encodeURIComponent(query)}`);
+                const data = await response.json();
+
+                if (data.success && data.data) {
+                    resultsDiv.innerHTML = `
+                        <div class="success-message">
+                            ✅ 直接查询成功 (CNAME: ${data.cname || 'N/A'})
+                        </div>
+                        <div class="results">
+                            ${data.data.map((record, index) => {
+                        const fullAddress = `${record.target}:${record.port}`;
+                        const httpUrl = `http://${fullAddress}`;
+                        const httpsUrl = `https://${fullAddress}`;
+                        return `
+                                <div class="result-item">
+                                    <h3 style="margin-bottom: 15px; color: #667eea;">记录 #${index + 1}</h3>
+                                    <div class="result-row">
+                                        <span class="result-label">🌐 完整访问地址:</span>
+                                        <span class="result-value" style="font-size: 16px; font-weight: bold; color: #667eea;">
+                                            ${fullAddress}
+                                        </span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">🔗 访问链接:</span>
+                                        <span class="result-value">
+                                            <a href="${httpUrl}" target="_blank" style="color: #667eea; text-decoration: none;">${httpUrl}</a>
+                                            <br>
+                                            <a href="${httpsUrl}" target="_blank" style="color: #667eea; text-decoration: none;">${httpsUrl}</a>
+                                        </span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">查询:</span>
+                                        <span class="result-value">${query}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">目标:</span>
+                                        <span class="result-value">${record.target}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">端口:</span>
+                                        <span class="result-value">${record.port}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">优先级:</span>
+                                        <span class="result-value">${record.priority}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">权重:</span>
+                                        <span class="result-value">${record.weight}</span>
+                                    </div>
+                                </div>
+                            `}).join('')}
+                        </div>
+                    `;
+                } else {
+                    resultsDiv.innerHTML = `
+                        <div class="result-item error">
+                            <strong>❌ 直接查询失败</strong><br>
+                            ${data.error || '未知错误'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result-item error">
+                        <strong>❌ 请求失败</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        document.getElementById('srvForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const service = document.getElementById('service').value.trim();
+            const proto = document.getElementById('proto').value.trim();
+            const domain = document.getElementById('domain').value.trim();
+            const resultsDiv = document.getElementById('results');
+            const submitBtn = document.getElementById('submitBtn');
+
+            // 显示加载状态
+            resultsDiv.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>正在查询 SRV 记录...</p>
+                </div>
+            `;
+            submitBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}?service=${encodeURIComponent(service)}&proto=${encodeURIComponent(proto)}&domain=${encodeURIComponent(domain)}`);
+                const data = await response.json();
+
+                if (data.success && data.data && data.data.length > 0) {
+                    let debugHtml = '';
+                    if (data.debug) {
+                        debugHtml = `
+                            <div class="debug-info">
+                                <strong>🔍 调试信息</strong>
+                                <pre>${JSON.stringify(data.debug, null, 2)}</pre>
+                            </div>
+                        `;
+                    }
+
+                    resultsDiv.innerHTML = `
+                        <div class="success-message">
+                            ✅ 成功查询到 ${data.data.length} 条 SRV 记录
+                        </div>
+                        ${debugHtml}
+                        <div class="results">
+                            ${data.data.map((record, index) => {
+                        const fullAddress = `${record.target}:${record.port}`;
+                        const httpUrl = `http://${fullAddress}`;
+                        const httpsUrl = `https://${fullAddress}`;
+                        return `
+                                <div class="result-item">
+                                    <h3 style="margin-bottom: 15px; color: #667eea;">记录 #${index + 1}</h3>
+                                    <div class="result-row">
+                                        <span class="result-label">🌐 完整访问地址:</span>
+                                        <span class="result-value" style="font-size: 16px; font-weight: bold; color: #667eea;">
+                                            ${fullAddress}
+                                        </span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">🔗 访问链接:</span>
+                                        <span class="result-value">
+                                            <a href="${httpUrl}" target="_blank" style="color: #667eea; text-decoration: none;">${httpUrl}</a>
+                                            <br>
+                                            <a href="${httpsUrl}" target="_blank" style="color: #667eea; text-decoration: none;">${httpsUrl}</a>
+                                        </span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">服务名称:</span>
+                                        <span class="result-value">${record.service}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">目标主机:</span>
+                                        <span class="result-value">${record.target}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">端口:</span>
+                                        <span class="result-value">${record.port}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">优先级:</span>
+                                        <span class="result-value">${record.priority}</span>
+                                    </div>
+                                    <div class="result-row">
+                                        <span class="result-label">权重:</span>
+                                        <span class="result-value">${record.weight}</span>
+                                    </div>
+                                </div>
+                            `}).join('')}
+                        </div>
+                    `;
+                } else {
+                    let debugHtml = '';
+                    if (data.debug) {
+                        debugHtml = `
+                            <div class="debug-info">
+                                <strong>🔍 调试信息</strong>
+                                <pre>${JSON.stringify(data.debug, null, 2)}</pre>
+                            </div>
+                        `;
+                    }
+
+                    resultsDiv.innerHTML = `
+                        <div class="result-item error">
+                            <strong>❌ 查询失败</strong><br>
+                            ${data.error || '未找到 SRV 记录'}
+                        </div>
+                        ${debugHtml}
+                    `;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="result-item error">
+                        <strong>❌ 网络错误</strong><br>
+                        ${error.message}<br><br>
+                        请确保后端服务已启动在 http://localhost:8080
+                    </div>
+                `;
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>
