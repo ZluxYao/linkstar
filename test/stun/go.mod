@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/huin/goupnp v1.3.0
+	github.com/libp2p/go-reuseport v0.4.0
 	github.com/pion/stun v0.6.1
 )
 

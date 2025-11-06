@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/huin/goupnp/dcps/internetgateway1"
+	"github.com/libp2p/go-reuseport"
 	"github.com/pion/stun"
 )
 
@@ -24,88 +25,6 @@ var (
 		"stun.bethesda.net:3478",
 		"stun.frozenmountain.com:3478",
 		"stun.telnyx.com:3478",
-		"stun.3deluxe.de:3478",
-		"stun.ncic.com:3478",
-		"stun.pure-ip.com:3478",
-		"stun.uabrides.com:3478",
-		"stun.zepter.ru:3478",
-		"stun.dcalling.de:3478",
-		"stun.myspeciality.com:3478",
-		"stun.business-isp.nl:3478",
-		"stun.ttmath.org:3478",
-		"stun.acronis.com:3478",
-		"stun.ipfire.org:3478",
-		"stun.graftlab.com:3478",
-		"stun.poetamatusel.org:3478",
-		"stun.sipnet.com:3478",
-		"stun.1cbit.ru:3478",
-		"stun.oncloud7.ch:3478",
-		"stun.sonetel.net:3478",
-		"stun.radiojar.com:3478",
-		"stun.sip.us:3478",
-		"stun.hot-chilli.net:3478",
-		"stun.bridesbay.com:3478",
-		"stun.fitauto.ru:3478",
-		"stun.lleida.net:3478",
-		"stun.f.haeder.net:3478",
-		"stun.finsterwalder.com:3478",
-		"stun.framasoft.org:3478",
-		"stun.siptrunk.com:3478",
-		"stun.axialys.net:3478",
-		"stun.ringostat.com:3478",
-		"stun.verbo.be:3478",
-		"stun.cellmail.com:3478",
-		"stun.romancecompass.com:3478",
-		"stun.voipgate.com:3478",
-		"stun.healthtap.com:3478",
-		"stun.thinkrosystem.com:3478",
-		"stun.technosens.fr:3478",
-		"stun.nextcloud.com:443",
-		"stun.files.fm:3478",
-		"stun.signalwire.com:3478",
-		"stun.cope.es:3478",
-		"stun.peethultra.be:3478",
-		"stun.vomessen.de:3478",
-		"stun.kaseya.com:3478",
-		"stun.kanojo.de:3478",
-		"stun.sonetel.com:3478",
-		"stun.bitburger.de:3478",
-		"stun.meetwife.com:3478",
-		"stun.alpirsbacher.de:3478",
-		"stun.m-online.net:3478",
-		"stun.linuxtrent.it:3478",
-		"stun.yesdates.com:3478",
-		"stun.diallog.com:3478",
-		"stun.mixvoip.com:3478",
-		"stun.atagverwarming.nl:3478",
-		"stun.voipia.net:3478",
-		"stun.baltmannsweiler.de:3478",
-		"stun.godatenow.com:3478",
-		"stun.tula.nu:3478",
-		"stun.nextcloud.com:3478",
-		"stun.siplogin.de:3478",
-		"stun.lovense.com:3478",
-		"stun.freeswitch.org:3478",
-		"stun.engineeredarts.co.uk:3478",
-		"stun.skydrone.aero:3478",
-		"stun.threema.ch:3478",
-		"stun.genymotion.com:3478",
-		"stun.fmo.de:3478",
-		"stun.voztovoice.org:3478",
-		"stun.ru-brides.com:3478",
-		"stun.moonlight-stream.org:3478",
-		"stun.romaaeterna.nl:3478",
-		"stun.stochastix.de:3478",
-		"stun.flashdance.cx:3478",
-		"stun.annatel.net:3478",
-		"stun.geesthacht.de:3478",
-		"stun.vavadating.com:3478",
-		"stun.3wayint.com:3478",
-		"stun.antisip.com:3478",
-		"stun.bcs2005.net:3478",
-		"stun.ukh.de:3478",
-		"stun.sipthor.net:3478",
-		"stun.voip.blackberry.com:3478",
 	}
 
 	publicIP       string                               // 真实公网IP
@@ -134,39 +53,33 @@ func main() {
 
 	// 步骤 1: 启动本地 HTTP 服务
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("📡 步骤 1/6: 启动本地 HTTP 服务")
+	fmt.Println("📡 步骤 1/5: 启动本地 HTTP 服务")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	startLocalHTTPService(LocalServicePort)
 
 	// 步骤 2: 选择最快 STUN 服务器
 	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("🔍 步骤 2/6: 测试并选择最快的 STUN 服务器")
+	fmt.Println("🔍 步骤 2/5: 测试并选择最快的 STUN 服务器")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	selectBestSTUN()
 
-	// 步骤 3: TCP STUN 获取运营商 NAT 映射
+	// 步骤 3: TCP STUN 获取运营商 NAT 映射并启动监听
 	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("🌐 步骤 3/6: 通过 STUN 获取公网IP和端口映射")
+	fmt.Println("🌐 步骤 3/5: 通过 STUN 获取公网映射并启动端口复用监听")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	if !getPublicMapping() {
+	if !getPublicMappingAndListen() {
 		log.Fatal("❌ 获取公网映射失败")
 	}
 
-	// 步骤 4: 启动端口转发服务
+	// 步骤 4: 检测 NAT 类型
 	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("🔀 步骤 4/6: 启动端口转发服务")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	startPortForwarder(stunLocalPort, LocalServicePort)
-
-	// 步骤 5: 检测 NAT 类型
-	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("🔍 步骤 5/6: 检测 NAT 类型")
+	fmt.Println("🔍 步骤 4/5: 检测 NAT 类型")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	detectNATType()
 
-	// 步骤 6: UPnP 配置路由器端口映射
+	// 步骤 5: UPnP 配置路由器端口映射
 	fmt.Println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("🔧 步骤 6/6: 配置路由器 UPnP 端口映射")
+	fmt.Println("🔧 步骤 5/5: 配置路由器 UPnP 端口映射")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	setupRouterMapping()
 
@@ -230,7 +143,7 @@ func startLocalHTTPService(port int) {
 		.info-item {
 			display: flex;
 			justify-content: space-between;
-			padding: 8px 0;   
+			padding: 8px 0;
 			border-bottom: 1px solid rgba(255,255,255,0.2);
 		}
 		.info-item:last-child { border-bottom: none; }
@@ -241,7 +154,7 @@ func startLocalHTTPService(port int) {
 			padding: 25px;
 			border-radius: 12px;
 			font-family: 'Monaco', 'Courier New', monospace;
-			margin: 20px 0;  
+			margin: 20px 0;
 			line-height: 1.8;
 			font-size: 0.9em;
 		}
@@ -321,7 +234,7 @@ func startLocalHTTPService(port int) {
 				<strong>1. STUN探测:</strong> 通过TCP连接STUN服务器，发现运营商NAT分配的公网端口 <span class="highlight">%d</span>
 			</div>
 			<div class="tech-item">
-				<strong>2. 端口绑定:</strong> 程序监听本地端口 <span class="highlight">%d</span>，确保与STUN探测使用同一端口
+				<strong>2. 端口复用:</strong> 使用SO_REUSEPORT在同一端口 <span class="highlight">%d</span> 上同时拨号和监听
 			</div>
 			<div class="tech-item">
 				<strong>3. UPnP自动配置:</strong> 路由器自动创建映射 %d → %s:%d
@@ -449,21 +362,13 @@ func selectBestSTUN() {
 	fmt.Printf("\n🎯 选择最快服务器: %s (%dms)\n", bestSTUN, bestDelay.Milliseconds())
 }
 
-// ========== 步骤 3: 获取公网映射 ==========
-func getPublicMapping() bool {
-	// 使用随机端口连接
-	localAddr := &net.TCPAddr{
-		IP:   net.ParseIP(localIP),
-		Port: 0, // 系统自动分配
-	}
+// ========== 步骤 3: 获取公网映射并启动监听 (修复版) ==========
+func getPublicMappingAndListen() bool {
+	// 第一步：使用 reuse.Dial 连接 STUN 服务器
+	localAddr := fmt.Sprintf("%s:0", localIP)
 
-	remoteAddr, err := net.ResolveTCPAddr("tcp", bestSTUN)
-	if err != nil {
-		log.Printf("❌ 解析 STUN 地址失败: %v\n", err)
-		return false
-	}
-
-	conn, err := net.DialTCP("tcp", localAddr, remoteAddr)
+	fmt.Println("📡 正在通过 STUN 获取公网映射...")
+	conn, err := reuseport.Dial("tcp", localAddr, bestSTUN)
 	if err != nil {
 		log.Printf("❌ 连接 STUN 服务器失败: %v\n", err)
 		return false
@@ -514,19 +419,19 @@ func getPublicMapping() bool {
 	fmt.Printf("   🌍 公网IP: %s\n", publicIP)
 	fmt.Printf("   🔑 公网端口: %d\n", stunMappedPort)
 
-	return true
-}
-
-// ========== 步骤 4: 启动端口转发服务 ==========
-func startPortForwarder(listenPort, targetPort int) {
-	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", listenPort))
+	// 第二步：在同一端口上创建监听器（端口复用）
+	fmt.Printf("\n📡 正在端口 %d 上创建监听器（SO_REUSEPORT）...\n", stunLocalPort)
+	listener, err := reuseport.Listen("tcp", fmt.Sprintf("%s:%d", localIP, stunLocalPort))
 	if err != nil {
-		log.Fatalf("❌ 监听端口 %d 失败: %v\n", listenPort, err)
+		log.Printf("⚠️  无法在端口 %d 上监听: %v\n", stunLocalPort, err)
+		log.Printf("   STUN 映射已获取，但端口复用失败\n")
+		return true // STUN 映射成功，继续执行
 	}
 
-	fmt.Printf("✅ 端口转发服务已启动: %d → %d\n", listenPort, targetPort)
-	fmt.Printf("   所有到达 %d 的流量将转发到本地 %d 端口\n", listenPort, targetPort)
+	fmt.Printf("✅ 监听器已启动，成功复用端口 %d\n", stunLocalPort)
+	fmt.Printf("   所有到达 %d 的流量将转发到本地 %d 端口\n", stunLocalPort, LocalServicePort)
 
+	// 启动监听服务，接受连接并转发
 	go func() {
 		for {
 			clientConn, err := listener.Accept()
@@ -534,14 +439,15 @@ func startPortForwarder(listenPort, targetPort int) {
 				log.Printf("⚠️  接受连接失败: %v\n", err)
 				continue
 			}
-
-			go handleForward(clientConn, targetPort)
+			go handleForward(clientConn, LocalServicePort)
 		}
 	}()
 
 	time.Sleep(500 * time.Millisecond)
+	return true
 }
 
+// ========== 端口转发处理 ==========
 func handleForward(clientConn net.Conn, targetPort int) {
 	defer clientConn.Close()
 
@@ -551,6 +457,8 @@ func handleForward(clientConn net.Conn, targetPort int) {
 		return
 	}
 	defer targetConn.Close()
+
+	log.Printf("🔀 [转发开始] %s → localhost:%d\n", clientConn.RemoteAddr(), targetPort)
 
 	// 双向转发
 	done := make(chan struct{}, 2)
@@ -586,18 +494,14 @@ func handleForward(clientConn net.Conn, targetPort int) {
 	}()
 
 	<-done
-	log.Printf("🔀 [转发] %s → localhost:%d (完成)\n", clientConn.RemoteAddr(), targetPort)
+	log.Printf("🔀 [转发完成] %s → localhost:%d\n", clientConn.RemoteAddr(), targetPort)
 }
 
-// ========== 步骤 5: 检测 NAT 类型 ==========
+// ========== 步骤 4: 检测 NAT 类型 ==========
 func detectNATType() {
-	localAddr := &net.TCPAddr{
-		IP:   net.ParseIP(localIP),
-		Port: 0,
-	}
+	localAddr := fmt.Sprintf("%s:0", localIP)
 
-	remoteAddr, _ := net.ResolveTCPAddr("tcp", bestSTUN)
-	conn, err := net.DialTCP("tcp", localAddr, remoteAddr)
+	conn, err := reuseport.Dial("tcp", localAddr, bestSTUN)
 	if err != nil {
 		natType = "检测失败"
 		fmt.Println("⚠️  NAT 类型检测失败")
@@ -631,11 +535,10 @@ func detectNATType() {
 		natType = "Address-Dependent (一般)"
 		fmt.Println("⚠️  NAT类型: Address-Dependent Mapping")
 		fmt.Println("   不同目标使用不同端口，需要保持连接活跃")
-
 	}
 }
 
-// ========== 步骤 6: 配置路由器 UPnP 映射 ==========
+// ========== 步骤 5: 配置路由器 UPnP 映射 ==========
 func setupRouterMapping() {
 	fmt.Println("🔍 正在发现 UPnP 网关设备...")
 
@@ -644,7 +547,7 @@ func setupRouterMapping() {
 		log.Printf("❌ UPnP 发现失败: %v\n", err)
 		log.Println("💡 请手动在路由器配置端口转发:")
 		log.Printf("   外部端口: %d → 内网IP: %s 内网端口: %d\n",
-			stunLocalPort, localIP, stunLocalPort) // ✅ 改为 stunLocalPort
+			stunLocalPort, localIP, stunLocalPort)
 		return
 	}
 
@@ -675,13 +578,12 @@ func setupRouterMapping() {
 	}
 
 	// 配置 UPnP 端口映射
-	// ✅ 关键修复：路由器应该映射 stunLocalPort，而不是 stunMappedPort
 	fmt.Printf("📡 正在配置 UPnP 映射: 外部 %d → 内网 %s:%d\n",
-		stunLocalPort, localIP, stunLocalPort) // ✅ 全部改为 stunLocalPort
+		stunLocalPort, localIP, stunLocalPort)
 
 	// 先删除可能存在的旧映射
 	for _, client := range upnpClients {
-		client.DeletePortMapping("", uint16(stunLocalPort), "TCP") // ✅ 改为 stunLocalPort
+		client.DeletePortMapping("", uint16(stunLocalPort), "TCP")
 	}
 
 	// 添加新映射
@@ -689,12 +591,12 @@ func setupRouterMapping() {
 	for i, client := range upnpClients {
 		err := client.AddPortMapping(
 			"",                    // NewRemoteHost
-			uint16(stunLocalPort), // NewExternalPort ✅ 改为 stunLocalPort
+			uint16(stunLocalPort), // NewExternalPort
 			"TCP",                 // NewProtocol
 			uint16(stunLocalPort), // NewInternalPort
 			localIP,               // NewInternalClient
 			true,                  // NewEnabled
-			"Linkstar",            // NewPortMappingDescription
+			"NAT-Traversal",       // NewPortMappingDescription
 			uint32(0),             // NewLeaseDuration (0=永久)
 		)
 
@@ -713,13 +615,13 @@ func setupRouterMapping() {
 		fmt.Println("❌ UPnP 端口映射失败")
 		fmt.Println("💡 请手动配置路由器端口转发:")
 		fmt.Printf("   外部端口: %d → 内网IP: %s 内网端口: %d\n",
-			stunLocalPort, localIP, stunLocalPort) // ✅ 改为 stunLocalPort
+			stunLocalPort, localIP, stunLocalPort)
 	}
 }
 
 // ========== 连接保活 (修复版) ==========
 func keepAlive() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 
 	maxRetries := 3
@@ -727,15 +629,12 @@ func keepAlive() {
 
 	for range ticker.C {
 		if stunConn == nil {
-			// ⚠️ 关键修复：不要尝试绑定到监听端口，让系统自动分配
-			localAddr := &net.TCPAddr{
-				IP:   net.ParseIP(localIP),
-				Port: 0, // ✅ 使用 0 让系统自动分配新端口
-			}
-			remoteAddr, _ := net.ResolveTCPAddr("tcp", bestSTUN)
+			// 重新连接 STUN 服务器
+			localAddr := fmt.Sprintf("%s:%d", localIP, stunLocalPort)
+			remoteAddr := bestSTUN
 
 			for retryCount < maxRetries {
-				conn, err := net.DialTCP("tcp", localAddr, remoteAddr)
+				conn, err := reuseport.Dial("tcp", localAddr, remoteAddr)
 				if err != nil {
 					retryCount++
 					log.Printf("⚠️  重连失败 (%d/%d): %v\n", retryCount, maxRetries, err)
@@ -745,11 +644,7 @@ func keepAlive() {
 
 				stunConn = conn
 				retryCount = 0
-				actualPort := conn.LocalAddr().(*net.TCPAddr).Port
-
-				// ⚠️ 注意：重连后本地端口会变化，但这不影响已建立的端口转发监听器
-				log.Printf("🔄 TCP STUN 连接已重建（新端口 %d，原监听端口 %d 保持不变）\n",
-					actualPort, stunLocalPort)
+				log.Printf("🔄 TCP STUN 连接已重建（端口 %d）\n", stunLocalPort)
 				break
 			}
 
@@ -822,7 +717,7 @@ func displayResult() {
 		fmt.Printf("🌍 真实公网IP:        %s\n", publicIP)
 		fmt.Printf("🔑 公网端口:          %d ⬅ 运营商NAT分配\n", stunMappedPort)
 		fmt.Printf("🏢 路由器WAN口IP:     %s\n", routerWanIP)
-		fmt.Printf("🔧 路由器映射端口:    %d ⬅ UPnP自动配置\n", stunMappedPort)
+		fmt.Printf("🔧 路由器映射端口:    %d ⬅ UPnP自动配置\n", stunLocalPort)
 		fmt.Printf("🏠 本机内网IP:        %s\n", localIP)
 		fmt.Printf("📡 端口转发:          %d → %d\n", stunLocalPort, LocalServicePort)
 
@@ -834,7 +729,7 @@ func displayResult() {
 		fmt.Printf("        ↓ [第一层NAT转换]\n")
 		fmt.Printf("   %s:%d (路由器WAN)\n", routerWanIP, stunMappedPort)
 		fmt.Printf("        ↓ [第二层NAT转换 - UPnP]\n")
-		fmt.Printf("   %s:%d (端口转发)\n", localIP, stunLocalPort)
+		fmt.Printf("   %s:%d (端口复用监听)\n", localIP, stunLocalPort)
 		fmt.Printf("        ↓ [程序内部转发]\n")
 		fmt.Printf("   localhost:%d (HTTP服务)\n", LocalServicePort)
 
@@ -860,9 +755,9 @@ func displayResult() {
 	fmt.Println("\n💡 技术说明")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf("• TCP STUN 探测: 发现运营商NAT端口 %d\n", stunMappedPort)
-	fmt.Printf("• 端口绑定: 程序监听本地端口 %d\n", stunLocalPort)
+	fmt.Printf("• 端口复用: 使用SO_REUSEPORT在端口 %d 上同时拨号和监听\n", stunLocalPort)
 	fmt.Printf("• UPnP 自动配置: 路由器映射 %d → %s:%d\n",
-		stunMappedPort, localIP, stunLocalPort)
+		stunLocalPort, localIP, stunLocalPort)
 	fmt.Printf("• 端口转发: %d 的流量转发到服务端口 %d\n", stunLocalPort, LocalServicePort)
 	fmt.Println("• 连接保活: 每15秒发送心跳维持NAT映射")
 	fmt.Println("• NAT类型:", natType)
