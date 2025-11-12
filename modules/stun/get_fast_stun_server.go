@@ -1,0 +1,5 @@
+package stun
+
+func GetFastStunServer() {
+
+}

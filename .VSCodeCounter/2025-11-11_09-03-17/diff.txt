@@ -1,0 +1,109 @@
+Date : 2025-11-11 09:03:17
+Directory : /Users/zlux/Project/Active/LinkStart/linkstar
+Total : 39 files,  1187 codes, 40 comments, 171 blanks, all 1398 lines
+
+Languages
++------------------+------------+------------+------------+------------+------------+
+| language         | files      | code       | comment    | blank      | total      |
++------------------+------------+------------+------------+------------+------------+
+| HTML             |          2 |        538 |          0 |         70 |        608 |
+| Go               |         23 |        377 |         40 |         93 |        510 |
+| Go Checksum File |          6 |        178 |          0 |          2 |        180 |
+| Go Module File   |          7 |         71 |          0 |          6 |         77 |
+| JSON             |          1 |         23 |          0 |          0 |         23 |
++------------------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                 | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                    |         39 |      1,187 |         40 |        171 |      1,398 |
+| . (Files)                                                                            |          3 |        135 |          1 |         10 |        146 |
+| ..                                                                                   |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../..                                                                                |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../..                                                                             |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../..                                                                          |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../..                                                                       |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../..                                                                    |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:                                                                 |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:/1_Study                                                         |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:/1_Study/Project                                                 |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:/1_Study/Project/Active                                          |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:/1_Study/Project/Active/LinkStar                                 |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:/1_Study/Project/Active/LinkStar/linkstar                        |          8 |       -883 |        -50 |       -143 |     -1,076 |
+| ../../../../../../d:/1_Study/Project/Active/LinkStar/linkstar (Files)                |          2 |         -5 |          0 |         -5 |        -10 |
+| ../../../../../../d:/1_Study/Project/Active/LinkStar/linkstar/test                   |          6 |       -878 |        -50 |       -138 |     -1,066 |
+| ../../../../../../d:/1_Study/Project/Active/LinkStar/linkstar/test/stun              |          3 |       -776 |        -40 |       -110 |       -926 |
+| ../../../../../../d:/1_Study/Project/Active/LinkStar/linkstar/test/upnp              |          3 |       -102 |        -10 |        -28 |       -140 |
+| api                                                                                  |          2 |          7 |          0 |          5 |         12 |
+| api (Files)                                                                          |          1 |          4 |          0 |          3 |          7 |
+| api/stun_api                                                                         |          1 |          3 |          0 |          2 |          5 |
+| config                                                                               |          2 |         24 |          0 |          1 |         25 |
+| core                                                                                 |          1 |          1 |          0 |          1 |          2 |
+| flags                                                                                |          1 |          1 |          0 |          1 |          2 |
+| global                                                                               |          1 |          2 |          0 |          2 |          4 |
+| middleware                                                                           |          1 |          1 |          0 |          1 |          2 |
+| modules                                                                              |          4 |         84 |          6 |         22 |        112 |
+| modules/srv                                                                          |          1 |          1 |          0 |          1 |          2 |
+| modules/stun                                                                         |          3 |         83 |          6 |         21 |        110 |
+| modules/stun (Files)                                                                 |          1 |          8 |          0 |          5 |         13 |
+| modules/stun/core                                                                    |          1 |         43 |          2 |          6 |         51 |
+| modules/stun/model                                                                   |          1 |         32 |          4 |         10 |         46 |
+| routers                                                                              |          3 |         14 |          0 |         10 |         24 |
+| routers (Files)                                                                      |          2 |         13 |          0 |          9 |         22 |
+| routers/stun                                                                         |          1 |          1 |          0 |          1 |          2 |
+| test                                                                                 |         10 |      1,764 |         77 |        246 |      2,087 |
+| test/srv-panel                                                                       |          4 |        853 |         23 |        115 |        991 |
+| test/srv-panel (Files)                                                               |          3 |        325 |         23 |         49 |        397 |
+| test/srv-panel/web                                                                   |          1 |        528 |          0 |         66 |        594 |
+| test/stun                                                                            |          3 |        746 |         39 |        106 |        891 |
+| test/upnp                                                                            |          3 |        165 |         15 |         25 |        205 |
+| utils                                                                                |          2 |         27 |          6 |         11 |         44 |
+| web                                                                                  |          1 |         10 |          0 |          4 |         14 |
++--------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| filename                                                                             | language         | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| /Users/zlux/Project/Active/LinkStart/linkstar/api/enter.go                           | Go               |          4 |          0 |          3 |          7 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/api/stun_api/enter.go                  | Go               |          3 |          0 |          2 |          5 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/config/enter.go                        | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/config/stunService.json                | JSON             |         23 |          0 |          0 |         23 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/core/enter.go                          | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/flags/enter.go                         | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/global/enter.go                        | Go               |          2 |          0 |          2 |          4 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/go.mod                                 | Go Module File   |         36 |          0 |          4 |         40 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/go.sum                                 | Go Checksum File |         88 |          0 |          1 |         89 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/main.go                                | Go               |         11 |          1 |          5 |         17 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/middleware/enter.go                    | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/srv/enter.go                   | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/core/init_stun_service.go | Go               |         43 |          2 |          6 |         51 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/init_stun.go              | Go               |          8 |          0 |          5 |         13 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/model/enter.go            | Go               |         32 |          4 |         10 |         46 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/routers/enter.go                       | Go               |          9 |          0 |          5 |         14 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/routers/stun.go                        | Go               |          4 |          0 |          4 |          8 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/routers/stun/enter.go                  | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/srv-panel/go.mod                  | Go Module File   |         36 |          0 |          4 |         40 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/srv-panel/go.sum                  | Go Checksum File |         88 |          0 |          1 |         89 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/srv-panel/main.go                 | Go               |        201 |         23 |         44 |        268 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/srv-panel/web/index.html          | HTML             |        528 |          0 |         66 |        594 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/stun/go.mod                       | Go Module File   |         15 |          0 |          4 |         19 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/stun/go.sum                       | Go Checksum File |         69 |          0 |          1 |         70 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/stun/main.go                      | Go               |        662 |         39 |        101 |        802 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/upnp/go.mod                       | Go Module File   |          4 |          0 |          4 |          8 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/upnp/go.sum                       | Go Checksum File |          4 |          0 |          1 |          5 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/test/upnp/main.go                      | Go               |        157 |         15 |         20 |        192 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/utils/enter.go                         | Go               |          1 |          0 |          1 |          2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/utils/utils_json.go                    | Go               |         26 |          6 |         10 |         42 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/web/index.html                         | HTML             |         10 |          0 |          4 |         14 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/go.mod                                   | Go Module File   |         -2 |          0 |         -2 |         -4 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/main.go                                  | Go               |         -3 |          0 |         -3 |         -6 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/test/stun/go.mod                         | Go Module File   |        -14 |          0 |         -4 |        -18 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/test/stun/go.sum                         | Go Checksum File |        -67 |          0 |         -1 |        -68 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/test/stun/main.go                        | Go               |       -695 |        -40 |       -105 |       -840 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/test/upnp/go.mod                         | Go Module File   |         -4 |          0 |         -4 |         -8 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/test/upnp/go.sum                         | Go Checksum File |         -4 |          0 |         -1 |         -5 |
+| d:/1_Study/Project/Active/LinkStar/linkstar/test/upnp/main.go                        | Go               |        -94 |        -10 |        -23 |       -127 |
+| Total                                                                                |                  |      1,187 |         40 |        171 |      1,398 |
++--------------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
