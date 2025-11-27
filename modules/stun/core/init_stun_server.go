@@ -11,7 +11,7 @@ func InitStunServers() []string {
 	var stunServers []string
 
 	// 检查文件是否存在
-	if _, err := os.Stat(configStunServersPath); os.IsNotExist(err) {
+	if fileInfo, err := os.Stat(configStunServersPath); os.IsNotExist(err) || fileInfo.Size() == 0 {
 
 		stunServers = []string{"stun.radiojar.com:3478",
 			"stun.ringostat.com:3478",

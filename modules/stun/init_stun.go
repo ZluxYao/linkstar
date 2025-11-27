@@ -2,13 +2,18 @@ package stun
 
 import (
 	"fmt"
+	"linkstar/global"
 	"linkstar/modules/stun/core"
 )
 
 func InitSTUN() {
-	var stunServers []string
 
-	stunServers = core.InitStunServers()
-	fmt.Println(stunServers)
+	global.StunConfig.StunServerList = core.InitStunServers()
+
+	global.StunConfig.BestSTUN = GetFastStunServer()
+
+	fmt.Println(global.StunConfig.BestSTUN)
+
+	GetPublicIPInfo()
 
 }

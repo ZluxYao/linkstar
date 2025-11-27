@@ -13,6 +13,7 @@ type StunConfig struct {
 	UpdatedAt   time.Time `json:"updatedAt"`   // 最后更新时间
 
 	StunServiceList []StunService `json:"stunServiceList"` // stun服务列表
+	StunServerList  []string      `json:"stunServerList"`
 }
 
 type StunService struct {

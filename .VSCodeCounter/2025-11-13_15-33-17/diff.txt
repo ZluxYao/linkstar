@@ -1,0 +1,46 @@
+Date : 2025-11-13 15:33:17
+Directory : /Users/zlux/Project/Active/LinkStart/linkstar
+Total : 11 files,  116 codes, 5 comments, 22 blanks, all 143 lines
+
+Languages
++------------------+------------+------------+------------+------------+------------+
+| language         | files      | code       | comment    | blank      | total      |
++------------------+------------+------------+------------+------------+------------+
+| Go               |          7 |         65 |          5 |         22 |         92 |
+| Go Checksum File |          1 |         45 |          0 |          0 |         45 |
+| Go Module File   |          1 |          6 |          0 |          0 |          6 |
+| JSON             |          2 |          0 |          0 |          0 |          0 |
++------------------+------------+------------+------------+------------+------------+
+
+Directories
++--------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                                 | files      | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                                    |         11 |        116 |          5 |         22 |        143 |
+| . (Files)                                                                            |          2 |         51 |          0 |          0 |         51 |
+| config                                                                               |          3 |         -1 |          0 |         -1 |         -2 |
+| global                                                                               |          1 |          3 |          0 |          1 |          4 |
+| modules                                                                              |          5 |         63 |          5 |         22 |         90 |
+| modules/stun                                                                         |          5 |         63 |          5 |         22 |         90 |
+| modules/stun (Files)                                                                 |          2 |         61 |          5 |         22 |         88 |
+| modules/stun/core                                                                    |          2 |          0 |          0 |          0 |          0 |
+| modules/stun/model                                                                   |          1 |          2 |          0 |          0 |          2 |
++--------------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++--------------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| filename                                                                             | language         | code       | comment    | blank      | total      |
++--------------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+
+| /Users/zlux/Project/Active/LinkStart/linkstar/config/enter.go                        | Go               |         -1 |          0 |         -1 |         -2 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/config/stunServers.json                | JSON             |         23 |          0 |          0 |         23 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/config/stunService.json                | JSON             |        -23 |          0 |          0 |        -23 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/global/enter.go                        | Go               |          3 |          0 |          1 |          4 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/go.mod                                 | Go Module File   |          6 |          0 |          0 |          6 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/go.sum                                 | Go Checksum File |         45 |          0 |          0 |         45 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/core/init_stun_server.go  | Go               |         43 |          2 |          6 |         51 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/core/init_stun_service.go | Go               |        -43 |         -2 |         -6 |        -51 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/get_fast_stun_server.go   | Go               |         58 |          5 |         20 |         83 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/init_stun.go              | Go               |          3 |          0 |          2 |          5 |
+| /Users/zlux/Project/Active/LinkStart/linkstar/modules/stun/model/enter.go            | Go               |          2 |          0 |          0 |          2 |
+| Total                                                                                |                  |        116 |          5 |         22 |        143 |
++--------------------------------------------------------------------------------------+------------------+------------+------------+------------+------------+

@@ -3,5 +3,5 @@ package global
 import "linkstar/modules/stun/model"
 
 var (
-	stun *model.StunConfig
+	StunConfig model.StunConfig
 )
