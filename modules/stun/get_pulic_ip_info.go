@@ -11,11 +11,8 @@ import (
 
 type PublicIPInfo struct {
 	// 基础网络信息
-	LocalIP     string `json:"localIP"`     // 本机内网IP
-	PublicIP    string `json:"publicIP"`    // 真实公网IP
-	RouterWanIP string `json:"routerWanIP"` // 路由器WAN口IP
-	IsNAT       bool   `json:"isNat"`       // 是否多层NAT
-
+	LocalIP  string `json:"localIP"`  // 本机内网IP
+	PublicIP string `json:"publicIP"` // 真实公网IP
 }
 
 // 获取网络基本信息
@@ -36,8 +33,6 @@ func GetPublicIPInfo() (*PublicIPInfo, error) {
 	}
 	info.PublicIP = PublicIP
 
-	fmt.Println(info)
-
 	return &info, nil
 }
 
@@ -49,7 +44,7 @@ func GetLocalIP() (string, error) {
 	}
 
 	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() { // 转换为IPNet类型，同时去除回环地址
 			if ipnet.IP.To4() != nil {
 				return ipnet.IP.String(), nil
 			}

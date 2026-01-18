@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	github.com/gin-gonic/gin v1.11.0
 	github.com/pion/stun v0.6.1
+	github.com/sirupsen/logrus v1.9.4
 )
 
 require (

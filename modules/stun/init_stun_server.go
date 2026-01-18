@@ -1,8 +1,8 @@
-package core
+package stun
 
 import (
 	"fmt"
-	"linkstar/utils"
+	"linkstar/utils/utilsFile"
 	"os"
 )
 
@@ -35,13 +35,13 @@ func InitStunServers() []string {
 			"stun.cibercloud.com.br:3478",
 			"stun.siptrunk.com:3478",
 		}
-		if err := utils.WriteJsonFile(configStunServersPath, stunServers); err != nil {
+		if err := utilsFile.WriteJsonFile(configStunServersPath, stunServers); err != nil {
 			fmt.Println("写入失败：", err)
 		}
 
 	} else {
 		// 文件存在就读取
-		stunServers, err = utils.ReadJsonFile[[]string](configStunServersPath)
+		stunServers, err = utilsFile.ReadJsonFile[[]string](configStunServersPath)
 		if err != nil {
 			fmt.Printf("stunService读取失败：%s\n", err)
 		}

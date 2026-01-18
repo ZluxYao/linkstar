@@ -4,22 +4,21 @@ import "time"
 
 type StunConfig struct {
 	// 基础网络信息
-	LocalIP     string    `json:"localIP"`     // 本机内网IP
-	PublicIP    string    `json:"publicIP"`    // 真实公网IP
-	RouterWanIP string    `json:"routerWanIP"` // 路由器WAN口IP
-	IsNAT       bool      `json:"isNat"`       // 是否多层NAT
-	BestSTUN    string    `json:"bestStun"`    // 最快的STUN服务器
-	CreatedAt   time.Time `json:"createdAt"`   // 配置创建时间
-	UpdatedAt   time.Time `json:"updatedAt"`   // 最后更新时间
+	LocalIP       string          `json:"localIP"`       // 本机内网IP
+	PublicIP      string          `json:"publicIP"`      // 真实公网IP
+	NatRouterList []NatRouterInfo `json:"natRouterList"` // 路由信息
+	BestSTUN      string          `json:"bestStun"`      // 最快的STUN服务器
+	CreatedAt     time.Time       `json:"createdAt"`     // 配置创建时间
+	UpdatedAt     time.Time       `json:"updatedAt"`     // 最后更新时间
 
 	StunServiceList []StunService `json:"stunServiceList"` // stun服务列表
-	StunServerList  []string      `json:"stunServerList"`
+	StunServerList  []string      `json:"stunServerList"`  // stun服务器列表
 }
 
 type StunService struct {
 	// 标识信息
-	ID          uint      `json:"id"`          // 唯一标识符
-	ServiceName string    `json:"serviceName"` // 服务名称（如 "HTTP", "SSH", "MySQL"）
+	ServiceID   uint      `json:"serviceId"`   // 唯一标识符
+	ServiceName string    `json:"serviceName"` // 服务名称
 	Description string    `json:"description"` // 描述信息
 	Enabled     bool      `json:"enabled"`     // 是否启用
 	CreatedAt   time.Time `json:"createdAt"`   // 创建时间
@@ -44,4 +43,10 @@ type ServicePort struct {
 
 	LastError string    `json:"lastError"` // 最后的错误信息
 	UpdatedAt time.Time `json:"updatedAt"` // 最后更新时间
+}
+
+// 每个Nat路由信息
+type NatRouterInfo struct {
+	NatLevel uint   `json:"natLevel"` // NAT层级
+	LanIp    string `json:"lanIP"`    // LAN口IP地址
 }

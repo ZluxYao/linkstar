@@ -3,6 +3,7 @@ package stun
 import (
 	"fmt"
 	"linkstar/global"
+
 	"net"
 	"sync"
 	"time"
@@ -29,7 +30,7 @@ func GetFastStunServer() string {
 			defer wg.Done()
 
 			star := time.Now()
-			conn, err := net.DialTimeout("tcp", srv, 3*time.Second)
+			conn, err := net.DialTimeout("tcp", srv, 2*time.Second)
 			if err != nil {
 				fmt.Printf("❌ %s - 建立tcp链接失败: %v\n", srv, err)
 				return
