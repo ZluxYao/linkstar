@@ -110,14 +110,14 @@ func InitSTUN() error {
 				Enabled:      true,
 				Description:  "HTTP服务",
 			},
-			{
-				ID:           2,
-				Name:         "SSH",
-				InternalPort: 22,
-				Protocol:     "TCP",
-				Enabled:      true,
-				Description:  "SSH远程访问",
-			},
+			// {
+			// 	ID:           2,
+			// 	Name:         "SSH",
+			// 	InternalPort: 22,
+			// 	Protocol:     "TCP",
+			// 	Enabled:      true,
+			// 	Description:  "SSH远程访问",
+			// },
 		},
 	}
 	// 3. 配置所有服务的STUN映射
