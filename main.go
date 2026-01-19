@@ -18,4 +18,5 @@ func main() {
 	stun.InitSTUN()
 
 	routers.Run()
+	select {}
 }

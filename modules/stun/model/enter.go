@@ -11,37 +11,36 @@ type StunConfig struct {
 	CreatedAt     time.Time       `json:"createdAt"`     // 配置创建时间
 	UpdatedAt     time.Time       `json:"updatedAt"`     // 最后更新时间
 
-	StunServiceList []StunService `json:"stunServiceList"` // stun服务列表
-	StunServerList  []string      `json:"stunServerList"`  // stun服务器列表
+	Devices        []Device `json:"devices"`        // stun设备列表
+	StunServerList []string `json:"stunServerList"` // stun服务器列表
 }
 
-type StunService struct {
-	// 标识信息
-	ServiceID   uint      `json:"serviceId"`   // 唯一标识符
-	ServiceName string    `json:"serviceName"` // 服务名称
-	Description string    `json:"description"` // 描述信息
-	Enabled     bool      `json:"enabled"`     // 是否启用
-	CreatedAt   time.Time `json:"createdAt"`   // 创建时间
-	UpdatedAt   time.Time `json:"updatedAt"`   // 最后更新时间
+type Device struct {
+	DeviceID uint      `josn:"id"`       // 设备ID
+	Name     string    `json:"name"`     // "本机" / "群晖NAS" / "树莓派"
+	IP       string    `json:"ip"`       // 设备ip
+	Services []Service `json:"services"` // 该设备上的服务
 
-	ServiceIP    string        `json:"serviceIP"`    // 服务IP地址
-	ServicePorts []ServicePort `json:"servicePorts"` // 服务端口
-
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
-// ServicePort 服务端口配置 - 管理单个端口映射
-type ServicePort struct {
-	Protocol     string `json:"protocol"`     // 协议类型: "TCP" 或 "UDP"
-	InternalPort uint16 `json:"internalPort"` // 内网端口
-	ExternalPort uint16 `json:"externalPort"` // 外网端口
-	Description  string `json:"description"`  // 端口描述
-	Enabled      bool   `json:"enabled"`      // 是否启用此端口映射
+// Service 单个服务配置
+type Service struct {
+	ID           uint   `json:"id"`           // 服务唯一标识符
+	Name         string `json:"name"`         // 服务名称,如 "SSH" / "Web管理" / "照片库"
+	InternalPort uint16 `json:"internalPort"` // 内网端口,如 22
+	ExternalPort uint16 `json:"externalPort"` // 外网映射端口,如 2222 (默认与 upnp映射端口一样)
+	Protocol     string `json:"protocol"`     // 传输协议 "TCP"/"UDP" (默认 TCP)
 
-	// UPnP
-	UseUPnP        bool   `json:"useUpnp"`        // 是否使用UPnP端口映射
-	UPnPMappedPort uint16 `json:"upnpMappedPort"` // UPnP
+	// UPnP 相关配置
+	UseUPnP        bool   `json:"useUpnp"`        // 是否启用 UPnP 自动端口映射 (默认 true)
+	UPnPMappedPort uint16 `json:"upnpMappedPort"` // UPnP 实际映射成功的端口号
 
-	LastError string    `json:"lastError"` // 最后的错误信息
+	Enabled     bool   `json:"enabled"`     // 服务是否启用 (默认 true)
+	Description string `json:"description"` // 服务描述信息 (可选)
+
+	LastError string    `json:"lastError"` // 最后一次操作的错误信息
 	UpdatedAt time.Time `json:"updatedAt"` // 最后更新时间
 }
 

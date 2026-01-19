@@ -4,8 +4,11 @@ go 1.25.1
 
 require (
 	github.com/gin-gonic/gin v1.11.0
+	github.com/huin/goupnp v1.3.0
+	github.com/libp2p/go-reuseport v0.4.0
 	github.com/pion/stun v0.6.1
 	github.com/sirupsen/logrus v1.9.4
+	golang.org/x/sync v0.16.0
 )
 
 require (
@@ -38,7 +41,6 @@ require (
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.27.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
