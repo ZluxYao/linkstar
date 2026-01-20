@@ -31,18 +31,6 @@ func InitSTUN() error {
 		return nil
 	})
 
-	// 2. 获取公网IP信息
-	g.Go(func() error {
-		publicIPInfo, err := GetPublicIPInfo()
-		if err != nil {
-			logrus.Errorf("获取网络信息失败:%v", err)
-			return err
-		}
-		global.StunConfig.PublicIP = publicIPInfo.PublicIP
-		global.StunConfig.LocalIP = publicIPInfo.LocalIP
-		return nil
-	})
-
 	// 3. 获取 NAT 路由列表
 	g.Go(func() error {
 		natRouterList, err := GetNatRouterList()
@@ -70,6 +58,16 @@ func InitSTUN() error {
 		logrus.Errorf("初始化STUN配置失败: %v", err)
 		return err
 	}
+
+	// 2. 获取公网IP信息
+
+	publicIPInfo, err := GetPublicIPInfo()
+	if err != nil {
+		logrus.Errorf("获取网络信息失败:%v", err)
+
+	}
+	global.StunConfig.PublicIP = publicIPInfo.PublicIP
+	global.StunConfig.LocalIP = publicIPInfo.LocalIP
 
 	// 设置时间戳
 	now := time.Now()
