@@ -33,16 +33,42 @@ func StarStun(devices []model.Device) error {
 			activeServices++
 
 			// 为每个服务创建单独进程
-			go func(device model.Device, service model.Service) {
-				if err := RunStunTunnel(device.IP, &service); err != nil {
-					logrus.Errorf("❌ [%s - %s] STUN 穿透失败: %v", device.Name, service.Name, err)
+			go func(device model.Device, service *model.Service) {
+				maxRetries := 5
+				attempt := 0
 
-					select {
-					case errChan <- fmt.Errorf("[%s - %s] 穿透失败: %w", device.Name, service.Name, err):
-					default:
+				for {
+					attempt++
+					logrus.Infof("[%s - %s] 启动服务 (第 %d 次)", device.Name, service.Name, attempt)
+
+					err := RunStunTunnel(device.IP, service)
+
+					if err != nil {
+						logrus.Errorf("❌ [%s - %s] STUN 穿透失败 (第 %d/%d 次): %v", device.Name, service.Name, attempt, maxRetries, err)
+
+						// 如果之前启动成功过(进入过健康检查),则重置计数
+						if service.StartupSuccess {
+							attempt = 0
+							service.StartupSuccess = false // 重置标志
+						}
+
+						// 达到最大重试次数
+						if attempt >= maxRetries {
+							service.Enabled = false
+							logrus.Errorf("[%s - %s] 达到最大重试次数,关闭服务", device.Name, service.Name)
+							select {
+							case errChan <- fmt.Errorf("[%s - %s] 达到最大重试次数: %w", device.Name, service.Name, err):
+							default:
+							}
+							return
+						}
+
+						// 等待一段时间再重试
+						time.Sleep(time.Second * 1)
+						continue
 					}
 				}
-			}(device, service)
+			}(device, &service)
 		}
 	}
 
@@ -64,7 +90,6 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 	// 1.STUN拨号
 	stunConn, err := reuseport.Dial(protocol, localAddr, global.StunConfig.BestSTUN) // 使用reuseport SO_REUSEPORT 可以复用端口
 	if err != nil {
-		stunConn.Close()
 		return fmt.Errorf("STUN拨号失败 [%s]:%w", global.StunConfig.BestSTUN, err)
 	}
 
@@ -128,6 +153,7 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 
 	if protocol == "tcp" {
 		go func() {
+			service.StartupSuccess = true
 			err = tcpStunHealthCheck(stunConn, publicURL, publicPort, localPort)
 			if err != nil {
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
@@ -135,6 +161,7 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 		}()
 	} else {
 		go func() {
+			service.StartupSuccess = true
 			udpConn := stunConn.(*net.UDPConn)
 			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
 			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
@@ -240,54 +267,43 @@ func tcpStunHealthCheck(stunConn net.Conn, publicURL string, expectedPublicPort 
 	defer healthTicker.Stop()
 
 	// 首次保活
-	if !httpCheckOK(publicURL, 3*time.Second) {
-		httpCheckOK(publicURL, 3*time.Second) // 不行来多一次
+	if !httpCheckWithRetry(publicURL, 2, 3*time.Second) {
+		return fmt.Errorf("首次保活失败，重启")
 	}
 
-	consecutiveFailures := 0 // 连续失败计数器
-	maxFailures := 3         // 失败阈值
+	maxFailures := 3 // 失败阈值
 	currentStunConn := stunConn
 
 	logrus.Info("启动TCP建康检查 间隔")
 
 	for range healthTicker.C {
-		if httpCheckOK(publicURL, 3*time.Second) {
-			consecutiveFailures = 0 // HTTP成功则重置失败计数
-			continue                // 跳过stun检查
+		// 策略1 Http 端到端检测+保活
+		if httpCheckWithRetry(publicURL, maxFailures, 3*time.Second) {
+			continue // 跳过stun检查
 		}
-
-		// HTTP检测失败，记录
-		consecutiveFailures++
 
 		// 策略2: STUN 检测NAT映射
 		_, port, err := doTcpStunHandshake(currentStunConn)
 		if err != nil {
 			logrus.Infof("STUN连接断开，尝试重连...")
 
-			// 重连
+			// 关闭旧连接
 			currentStunConn.Close()
+			// 重连STUN
 			localAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
 			newConn, err := reuseport.Dial("tcp", localAddr, global.StunConfig.BestSTUN)
 			if err != nil {
-				// 重连失败，但如果HTTP之前一直成功，可能只是临时问题
-				if consecutiveFailures >= maxFailures {
-					return fmt.Errorf("STUN重连失败且HTTP连续%d次失败", consecutiveFailures)
-				}
-				logrus.Warnf("STUN重连失败但未达阈值: %v", err)
-				continue
+				return fmt.Errorf("STUN重连失败: %w", err)
 			}
 
-			// 验证新的连接，确保外部端口没变
+			// 验证新连接的端口
 			_, newPort, err := doTcpStunHandshake(newConn)
 			if err != nil {
 				newConn.Close()
-				if consecutiveFailures >= maxFailures {
-					return fmt.Errorf("重连后STUN验证失败")
-				}
-				continue
+				return fmt.Errorf("重连后STUN验证失败: %w", err)
 			}
 
-			// 判断端口变没，如果变了必须退出，重新打洞
+			// 检查端口是否变化
 			if newPort != expectedPublicPort {
 				newConn.Close()
 				return fmt.Errorf("公网端口漂移 %d -> %d", expectedPublicPort, newPort)
@@ -295,19 +311,17 @@ func tcpStunHealthCheck(stunConn net.Conn, publicURL string, expectedPublicPort 
 
 			logrus.Infof("✅ STUN重连成功，端口保持 %d", newPort)
 			currentStunConn = newConn
-			consecutiveFailures = 0 // 重连成功，重置计数
 			continue
 		}
 
-		// STUN 正常 但是端口变了，得重启
+		// STUN正常但端口变化，触发重启
 		if port != expectedPublicPort {
-			return fmt.Errorf("❌ 公网端口变化 %d -> %d", expectedPublicPort, port)
+			// 后续这个如何可以用的话可以直接修改换成新的就行，不用重启
+			return fmt.Errorf("❌ 公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, port)
 		}
 
-		// STUN正常 HTTP失败
-		if consecutiveFailures >= maxFailures {
-			return fmt.Errorf("HTTP连续失败%d次", consecutiveFailures)
-		}
+		// STUN正常但HTTP持续失败，可能是上游服务问题
+		logrus.Warn("STUN端口正常但HTTP持续失败，可能需要检查上游服务")
 	}
 
 	return nil
@@ -375,6 +389,45 @@ func udpStunHealthCheck(udpConn *net.UDPConn, stunServer *net.UDPAddr, expectedP
 	}
 	return nil
 
+}
+
+func httpCheckWithRetry(url string, maxRetries int, interval time.Duration) bool {
+	// 创建可复用的 Transport（移到循环外）
+	tr := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		MaxIdleConns:      10,
+		IdleConnTimeout:   30 * time.Second,
+		DisableKeepAlives: true, // 启用连接复用
+	}
+	defer tr.CloseIdleConnections() // 函数结束时清理空闲连接
+
+	client := &http.Client{
+		Timeout:   3 * time.Second,
+		Transport: tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err := client.Get(url)
+
+		//无论成功失败都要关闭 Body
+		if resp != nil && resp.Body != nil {
+			resp.Body.Close()
+		}
+
+		if err != nil {
+			logrus.Debug("HTTP端到端检查 NOT OK", url)
+			time.Sleep(interval)
+			continue
+		}
+
+		logrus.Debug("HTTP端到端检查 OK", url)
+		return resp.StatusCode > 0
+	}
+
+	return false
 }
 
 // HTTP端到端检查

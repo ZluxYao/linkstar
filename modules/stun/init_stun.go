@@ -6,6 +6,7 @@ import (
 	"linkstar/modules/stun/model"
 	"log"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 
@@ -20,6 +21,15 @@ var (
 )
 
 func InitSTUN() error {
+
+	// go func() {
+	// 	for {
+	// 		numGoroutines := runtime.NumGoroutine()
+	// 		time.Sleep(1 * time.Second)
+	// 		logrus.Infof("当前 goroutine 数量: %d", numGoroutines)
+	// 	}
+
+	// }()
 	global.StunConfig.StunServerList = InitStunServers()
 
 	var g errgroup.Group
