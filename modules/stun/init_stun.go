@@ -82,7 +82,8 @@ func InitSTUN() error {
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("📡 步骤 1/5: 启动本地 HTTP 服务")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	startLocalHTTPService(3335)
+
+	startLocalHTTPService(3336)
 
 	// // upnp 端口转发
 	// if err := AddPortMapping(3335, 3335, "TCP", "Custom Port 3333 TCP"); err != nil {
@@ -94,38 +95,40 @@ func InitSTUN() error {
 	// }
 
 	// 2. 加载设备配置(从数据库或配置文件)
-	device := &model.Device{
+	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
 		DeviceID: 1,
 		Name:     "本机",
-		IP:       global.StunConfig.LocalIP, // 注意：生产环境应动态获取
+		IP:       "192.168.100.1",
 		Services: []model.Service{
+			// {
+			// 	ID:           1,
+			// 	Name:         "Web管理",
+			// 	InternalPort: 3336,
+			// 	ExternalPort: 0,
+			// 	Protocol:     "TCP",
+			// 	Enabled:      true,
+			// 	Description:  "HTTP服务",
+			// },
 			{
 				ID:           1,
-				Name:         "Web管理",
-				InternalPort: 3335,
+				Name:         "Viepass",
+				InternalPort: 5176,
 				ExternalPort: 0,
 				Protocol:     "TCP",
 				Enabled:      true,
 				Description:  "HTTP服务",
 			},
-			// {
-			// 	ID:           2,
-			// 	Name:         "SSH",
-			// 	InternalPort: 22,
-			// 	Protocol:     "TCP",
-			// 	Enabled:      true,
-			// 	Description:  "SSH远程访问",
-			// },
 		},
-	}
+	})
+	TestRunStunTunnel()
 	// 3. 配置所有服务的STUN映射
-	if err := SetupDeviceServices(device); err != nil {
-		log.Fatalf("配置服务失败: %v", err)
-	}
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
-	// 注意：由于是异步启动，立即打印可能端口还未获取到，实际以日志为准
-	time.Sleep(1 * time.Second)
+	// if err := SetupDeviceServices(device); err != nil {
+	// 	log.Fatalf("配置服务失败: %v", err)
+	// }
+	// fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	// fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
+	// // 注意：由于是异步启动，立即打印可能端口还未获取到，实际以日志为准
+	// time.Sleep(1 * time.Second)
 	return nil
 }
 
