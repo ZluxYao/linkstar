@@ -30,8 +30,9 @@ type Service struct {
 	ID           uint   `json:"id"`           // 服务唯一标识符
 	Name         string `json:"name"`         // 服务名称,如 "SSH" / "Web管理" / "照片库"
 	InternalPort uint16 `json:"internalPort"` // 内网端口,如 22
-	ExternalPort uint16 `json:"externalPort"` // 外网映射端口,如 2222 (默认与 upnp映射端口一样)
+	ExternalPort uint16 `json:"externalPort"` // 外网映射端口,如 2222 (默认与 upnp映射端口一样
 	Protocol     string `json:"protocol"`     // 传输协议 "TCP"/"UDP" (默认 TCP)
+	Tlss         bool   `json:"tlss"`
 
 	// UPnP 相关配置
 	UseUPnP        bool   `json:"useUpnp"`        // 是否启用 UPnP 自动端口映射 (默认 true)

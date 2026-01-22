@@ -97,38 +97,48 @@ func InitSTUN() error {
 	// 2. 加载设备配置(从数据库或配置文件)
 	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
 		DeviceID: 1,
-		Name:     "本机",
+		Name:     "istore",
 		IP:       "192.168.100.1",
 		Services: []model.Service{
-			// {
-			// 	ID:           1,
-			// 	Name:         "Web管理",
-			// 	InternalPort: 3336,
-			// 	ExternalPort: 0,
-			// 	Protocol:     "TCP",
-			// 	Enabled:      true,
-			// 	Description:  "HTTP服务",
-			// },
 			{
 				ID:           1,
 				Name:         "Viepass",
 				InternalPort: 5176,
 				ExternalPort: 0,
 				Protocol:     "TCP",
+				Tlss:         true,
 				Enabled:      true,
 				Description:  "HTTP服务",
 			},
 		},
 	})
-	TestRunStunTunnel()
+
+	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
+		DeviceID: 2,
+		Name:     "本机",
+		IP:       global.StunConfig.LocalIP,
+		Services: []model.Service{
+			{
+				ID:           1,
+				Name:         "STUN panel",
+				InternalPort: 3336,
+				ExternalPort: 0,
+				Protocol:     "TCP",
+				Tlss:         false,
+				Enabled:      true,
+				Description:  "HTTP服务",
+			},
+		},
+	})
+
 	// 3. 配置所有服务的STUN映射
-	// if err := SetupDeviceServices(device); err != nil {
-	// 	log.Fatalf("配置服务失败: %v", err)
-	// }
-	// fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	// fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
-	// // 注意：由于是异步启动，立即打印可能端口还未获取到，实际以日志为准
-	// time.Sleep(1 * time.Second)
+	if err := StarStun(global.StunConfig.Devices); err != nil {
+		log.Fatalf("配置服务失败: %v", err)
+	}
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
+	// 注意：由于是异步启动，立即打印可能端口还未获取到，实际以日志为准
+	time.Sleep(1 * time.Second)
 	return nil
 }
 
