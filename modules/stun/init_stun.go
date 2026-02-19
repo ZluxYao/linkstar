@@ -6,7 +6,6 @@ import (
 	"linkstar/modules/stun/model"
 	"log"
 	"net/http"
-	"runtime"
 	"strings"
 	"time"
 
@@ -137,6 +136,52 @@ func InitSTUN() error {
 				Tlss:         false,
 				Enabled:      true,
 				Description:  "HTTP服务",
+			},
+			// {
+			// 	ID:           1,
+			// 	Name:         "7070",
+			// 	InternalPort: 7070,
+			// 	ExternalPort: 0,
+			// 	Protocol:     "TCP",
+			// 	Tlss:         false,
+			// 	Enabled:      true,
+			// 	Description:  "HTTP服务",
+			// },
+		},
+	})
+
+	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
+		DeviceID: 3,
+		Name:     "NAS",
+		IP:       "192.168.100.151",
+		Services: []model.Service{
+			{
+				ID:           1,
+				Name:         "NAS",
+				InternalPort: 5666,
+				ExternalPort: 0,
+				Protocol:     "TCP",
+				Tlss:         false,
+				Enabled:      true,
+				Description:  "NAS",
+			},
+		},
+	})
+
+	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
+		DeviceID: 3,
+		Name:     "NAS",
+		IP:       "192.168.100.151",
+		Services: []model.Service{
+			{
+				ID:           1,
+				Name:         "ubuntu24",
+				InternalPort: 22,
+				ExternalPort: 0,
+				Protocol:     "TCP",
+				Tlss:         false,
+				Enabled:      true,
+				Description:  "NAS",
 			},
 		},
 	})
