@@ -85,6 +85,10 @@ func StarStun(devices []model.Device) error {
 // 实现stun内网穿透逻辑
 func RunStunTunnel(targetIP string, service *model.Service) error {
 	protocol := strings.ToLower(service.Protocol) // 转为小写
+	// ssh 是应用层协议，底层走 tcp
+	if protocol == "ssh" {
+		protocol = "tcp"
+	}
 	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
 
 	// 1.STUN拨号
@@ -154,7 +158,7 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 	if protocol == "tcp" {
 		go func() {
 			service.StartupSuccess = true
-			err = tcpStunHealthCheck(stunConn, publicURL, publicPort, localPort)
+			err = tcpStunHealthCheck(stunConn, publicURL, publicIP, publicPort, localPort, service)
 			if err != nil {
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
 			}
@@ -166,7 +170,7 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
 			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
 			if err != nil {
-				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
+				errCh <- fmt.Errorf("UDP健康检查失败: %w", err)
 			}
 		}()
 	}
@@ -261,25 +265,84 @@ func doUDPStunHandshake(conn *net.UDPConn, stunServerAddr *net.UDPAddr) (string,
 	return xorAddr.IP.String(), xorAddr.Port, nil
 }
 
+// sshConnectCheck 通过读取 SSH 横幅来验证 SSH 服务可达性
+func sshConnectCheck(host string, port int, timeout time.Duration) bool {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		logrus.Debugf("SSH连接检查失败 %s: %v", addr, err)
+		return false
+	}
+	defer conn.Close()
+
+	// 读取 SSH 横幅，例如 "SSH-2.0-OpenSSH_8.9"
+	buf := make([]byte, 64)
+	conn.SetReadDeadline(time.Now().Add(timeout))
+	n, err := conn.Read(buf)
+	if err != nil || n == 0 {
+		logrus.Debugf("SSH横幅读取失败 %s: %v", addr, err)
+		return false
+	}
+
+	banner := string(buf[:n])
+	if strings.HasPrefix(banner, "SSH-") {
+		logrus.Debugf("SSH检查 OK %s, 横幅: %s", addr, strings.TrimSpace(banner))
+		return true
+	}
+
+	logrus.Debugf("SSH检查 NOT OK %s, 收到: %s", addr, strings.TrimSpace(banner))
+	return false
+}
+
+// serviceHealthCheck 根据 Protocol 字段选择合适的健康检查方式
+// Protocol: "ssh" -> SSH横幅检测, "http"/"https" -> HTTP检测, "tcp"/"udp" -> TCP连通性检测
+func serviceHealthCheck(service *model.Service, publicURL string, publicIP string, publicPort int) bool {
+	proto := strings.ToLower(service.Protocol)
+
+	switch proto {
+	case "ssh":
+		return sshConnectCheck(publicIP, publicPort, 3*time.Second)
+	case "http", "https":
+		return httpCheckWithRetry(publicURL, 1, 3*time.Second)
+	default:
+		// tcp/udp 等其他协议使用 TCP 连通性检查
+		return tcpConnectCheck(publicIP, publicPort, 3*time.Second)
+	}
+}
+
+// tcpConnectCheck 通用 TCP 连通性检查
+func tcpConnectCheck(host string, port int, timeout time.Duration) bool {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		logrus.Debugf("TCP连接检查失败 %s: %v", addr, err)
+		return false
+	}
+	conn.Close()
+	logrus.Debugf("TCP连接检查 OK %s", addr)
+	return true
+}
+
 // TCP STUN 健康检测
-func tcpStunHealthCheck(stunConn net.Conn, publicURL string, expectedPublicPort int, localPort uint16) error {
-	healthTicker := time.NewTicker(28 * time.Second) // 每30s 检测一次
+func tcpStunHealthCheck(stunConn net.Conn, publicURL string, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
+	healthTicker := time.NewTicker(28 * time.Second) // 每28s 检测一次
 	defer healthTicker.Stop()
 
-	// 首次保活
-	if !httpCheckWithRetry(publicURL, 2, 3*time.Second) {
+	// 首次保活：等待 NAT 映射稳定后再检查
+	time.Sleep(2 * time.Second)
+	if !serviceHealthCheck(service, publicURL, publicIP, expectedPublicPort) {
 		return fmt.Errorf("首次保活失败，重启")
 	}
 
 	maxFailures := 3 // 失败阈值
 	currentStunConn := stunConn
 
-	logrus.Info("启动TCP建康检查 间隔")
+	logrus.Info("启动TCP健康检查 间隔28s")
 
 	for range healthTicker.C {
-		// 策略1 Http 端到端检测+保活
-		if httpCheckWithRetry(publicURL, maxFailures, 3*time.Second) {
-			continue // 跳过stun检查
+		// 策略1: 端到端服务检测+保活
+		if serviceHealthCheck(service, publicURL, publicIP, expectedPublicPort) {
+			continue // 服务正常，跳过stun检查
 		}
 
 		// 策略2: STUN 检测NAT映射
@@ -316,12 +379,11 @@ func tcpStunHealthCheck(stunConn net.Conn, publicURL string, expectedPublicPort 
 
 		// STUN正常但端口变化，触发重启
 		if port != expectedPublicPort {
-			// 后续这个如何可以用的话可以直接修改换成新的就行，不用重启
 			return fmt.Errorf("❌ 公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, port)
 		}
 
-		// STUN正常但HTTP持续失败，可能是上游服务问题
-		logrus.Warn("STUN端口正常但HTTP持续失败，可能需要检查上游服务")
+		// STUN正常但服务持续失败，可能是上游服务问题
+		logrus.Warnf("STUN端口正常但服务检查持续失败（已检查 %d 次），可能需要检查上游服务", maxFailures)
 	}
 
 	return nil
@@ -329,14 +391,14 @@ func tcpStunHealthCheck(stunConn net.Conn, publicURL string, expectedPublicPort 
 
 // UDP健康检测
 func udpStunHealthCheck(udpConn *net.UDPConn, stunServer *net.UDPAddr, expectedPublicPort int, localPort uint16) error {
-	healthTicker := time.NewTicker(28 * time.Second) // 每30s 健康检测一次
+	healthTicker := time.NewTicker(28 * time.Second) // 每28s 健康检测一次
 	defer healthTicker.Stop()
 
 	consecutiveFailures := 0 // 连续失败计数器
 	maxFailures := 3         // 失败阈值
 	currentConn := udpConn
 
-	logrus.Info("启动UDP健康检查 间隔30s，心跳间隔25s")
+	logrus.Info("启动UDP健康检查 间隔28s")
 
 	for range healthTicker.C {
 		// STUN 检测NAT映射
@@ -397,7 +459,7 @@ func httpCheckWithRetry(url string, maxRetries int, interval time.Duration) bool
 		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
 		MaxIdleConns:      10,
 		IdleConnTimeout:   30 * time.Second,
-		DisableKeepAlives: true, // 启用连接复用
+		DisableKeepAlives: true,
 	}
 	defer tr.CloseIdleConnections() // 函数结束时清理空闲连接
 
@@ -441,7 +503,7 @@ func httpCheckOK(url string, timeout time.Duration) bool {
 	client := http.Client{
 		Timeout:   timeout,
 		Transport: tr,
-		// 不根随重定向 301 302说明服务通过
+		// 不跟随重定向 301 302说明服务通过
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

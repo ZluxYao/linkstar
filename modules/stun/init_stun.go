@@ -104,23 +104,23 @@ func InitSTUN() error {
 	// }
 
 	// 2. 加载设备配置(从数据库或配置文件)
-	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
-		DeviceID: 1,
-		Name:     "istore",
-		IP:       "192.168.100.1",
-		Services: []model.Service{
-			{
-				ID:           1,
-				Name:         "Viepass",
-				InternalPort: 5176,
-				ExternalPort: 0,
-				Protocol:     "TCP",
-				Tlss:         true,
-				Enabled:      true,
-				Description:  "HTTP服务",
-			},
-		},
-	})
+	// global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
+	// 	DeviceID: 1,
+	// 	Name:     "istore",
+	// 	IP:       "192.168.100.1",
+	// 	Services: []model.Service{
+	// 		{
+	// 			ID:           1,
+	// 			Name:         "Viepass",
+	// 			InternalPort: 5176,
+	// 			ExternalPort: 0,
+	// 			Protocol:     "TCP",
+	// 			Tlss:         true,
+	// 			Enabled:      true,
+	// 			Description:  "HTTP服务",
+	// 		},
+	// 	},
+	// })
 
 	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
 		DeviceID: 2,
@@ -171,17 +171,18 @@ func InitSTUN() error {
 	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
 		DeviceID: 3,
 		Name:     "NAS",
-		IP:       "192.168.100.151",
+		IP:       "192.168.100.126",
 		Services: []model.Service{
 			{
 				ID:           1,
 				Name:         "ubuntu24",
 				InternalPort: 22,
 				ExternalPort: 0,
-				Protocol:     "TCP",
-				Tlss:         false,
-				Enabled:      true,
-				Description:  "NAS",
+				Protocol:     "ssh",
+
+				Tlss:        false,
+				Enabled:     true,
+				Description: "NAS",
 			},
 		},
 	})
@@ -409,6 +410,11 @@ func startLocalHTTPService(port int) {
 				⚠️  保持程序运行以维持穿透状态
 			</div>
 		</div>
+
+		<div class="section">
+			<h3>🖥️ 已配置设备列表 (%d台)</h3>
+			%s
+		</div>
 	</div>
 </body>
 </html>`,
@@ -425,6 +431,8 @@ func startLocalHTTPService(port int) {
 			cfg.LocalIP,
 			publicAddr,
 			port,
+			len(cfg.Devices),
+			buildDevicesHTML(cfg.Devices),
 		)
 
 		w.Write([]byte(html))
@@ -502,4 +510,105 @@ func buildFlowChart(cfg model.StunConfig, localPort int) string {
 	chart.WriteString(fmt.Sprintf("💻 本机服务: %s:%d\n", cfg.LocalIP, localPort))
 
 	return chart.String()
+}
+
+// 构建设备列表HTML展示
+func buildDevicesHTML(devices []model.Device) string {
+	if len(devices) == 0 {
+		return `<div class="nat-level">📭 暂无配置设备</div>`
+	}
+
+	var html strings.Builder
+	html.WriteString(`<style>
+		.device-card {
+			background: white;
+			border: 1px solid #e2e8f0;
+			border-radius: 8px;
+			padding: 15px;
+			margin: 10px 0;
+		}
+		.device-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 10px;
+			padding-bottom: 10px;
+			border-bottom: 1px solid #e2e8f0;
+		}
+		.device-name {
+			font-size: 1.1em;
+			font-weight: bold;
+			color: #334155;
+		}
+		.device-ip {
+			color: #64748b;
+			font-family: monospace;
+		}
+		.service-list {
+			margin-top: 10px;
+		}
+		.service-item {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			padding: 8px 12px;
+			background: #f1f5f9;
+			border-radius: 6px;
+			margin: 5px 0;
+			font-size: 0.9em;
+		}
+		.service-name {
+			font-weight: 500;
+			color: #475569;
+		}
+		-service-info {
+			color: #64748b;
+			font-size: 0.85em;
+		}
+		.service-enabled {
+			color: #10b981;
+		}
+		.service-disabled {
+			color: #ef4444;
+		}
+	</style>`)
+
+	for _, device := range devices {
+		html.WriteString(fmt.Sprintf(`
+			<div class="device-card">
+				<div class="device-header">
+					<span class="device-name">🖥️ %s (ID: %d)</span>
+					<span class="device-ip">%s</span>
+				</div>
+				<div class="service-list">`, device.Name, device.DeviceID, device.IP))
+
+		if len(device.Services) == 0 {
+			html.WriteString(`<div class="service-item" style="color: #94a3b8;">暂无服务配置</div>`)
+		} else {
+			for _, svc := range device.Services {
+				enabledStr := `<span class="service-enabled">✅ 已启用</span>`
+				if !svc.Enabled {
+					enabledStr = `<span class="service-disabled">❌ 已禁用</span>`
+				}
+				tlsStr := ""
+				if svc.Tlss {
+					tlsStr = " 🔒"
+				}
+
+				html.WriteString(fmt.Sprintf(`
+					<div class="service-item">
+						<span class="service-name">%s%s</span>
+						<span class="service-info">
+							%s | 内部端口: %d | 外部端口: %d | %s
+						</span>
+					</div>`, svc.Name, tlsStr, svc.Protocol, svc.InternalPort, svc.ExternalPort, enabledStr))
+			}
+		}
+
+		html.WriteString(`
+				</div>
+			</div>`)
+	}
+
+	return html.String()
 }
