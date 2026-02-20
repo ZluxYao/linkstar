@@ -11,6 +11,7 @@ import (
 	"github.com/pion/stun"
 )
 
+// 获取当前网络最快stun服务器
 func GetFastStunServer() string {
 
 	type result struct {

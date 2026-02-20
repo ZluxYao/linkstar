@@ -33,7 +33,7 @@ type Service struct {
 	InternalPort   uint16 `json:"internalPort"` // 内网端口,如 22
 	ExternalPort   uint16 `json:"externalPort"` // 外网映射端口,如 2222 (默认与 upnp映射端口一样
 	Protocol       string `json:"protocol"`     // 传输协议 "TCP"/"UDP" (默认 TCP)
-	Tlss           bool   `json:"tlss"`
+	TLS            bool   `json:"tls"`          // 证书
 
 	// UPnP 相关配置
 	UseUPnP        bool   `json:"useUpnp"`        // 是否启用 UPnP 自动端口映射 (默认 true)

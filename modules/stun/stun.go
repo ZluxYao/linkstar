@@ -149,7 +149,7 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 	logrus.Infof("%v %v %v", localPort, publicIP, publicPort)
 
 	var publicURL string
-	if service.Tlss {
+	if service.TLS {
 		publicURL = fmt.Sprintf("https://%s:%d", publicIP, publicPort)
 	} else {
 		publicURL = fmt.Sprintf("http://%s:%d", publicIP, publicPort)

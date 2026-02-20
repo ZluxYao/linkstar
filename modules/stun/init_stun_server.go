@@ -1,9 +1,10 @@
 package stun
 
 import (
-	"fmt"
 	"linkstar/utils/utilsFile"
 	"os"
+
+	"github.com/sirupsen/logrus"
 )
 
 func InitStunServers() []string {
@@ -36,14 +37,14 @@ func InitStunServers() []string {
 			"stun.siptrunk.com:3478",
 		}
 		if err := utilsFile.WriteJsonFile(configStunServersPath, stunServers); err != nil {
-			fmt.Println("写入失败：", err)
+			logrus.Error("StunServers 写入失败：", err)
 		}
 
 	} else {
 		// 文件存在就读取
 		stunServers, err = utilsFile.ReadJsonFile[[]string](configStunServersPath)
 		if err != nil {
-			fmt.Printf("stunService读取失败：%s\n", err)
+			logrus.Error("stunService 读取失败：%s\n", err)
 		}
 	}
 	return stunServers

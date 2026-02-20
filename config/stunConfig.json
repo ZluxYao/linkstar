@@ -1,0 +1,115 @@
+{
+  "localIP": "192.168.100.187",
+  "publicIP": "14.19.66.252",
+  "natRouterList": [
+    {
+      "natLevel": 1,
+      "lanIP": "192.168.100.1"
+    },
+    {
+      "natLevel": 2,
+      "lanIP": "192.168.31.1"
+    },
+    {
+      "natLevel": 3,
+      "lanIP": "100.72.0.1"
+    }
+  ],
+  "bestStun": "stun.tula.nu:3478",
+  "createdAt": "2026-02-20T23:28:57.2429459+08:00",
+  "updatedAt": "2026-02-20T23:29:16.3623271+08:00",
+  "devices": [
+    {
+      "DeviceID": 2,
+      "name": "本机",
+      "ip": "192.168.100.187",
+      "services": [
+        {
+          "id": 1,
+          "name": "STUN panel",
+          "internalPort": 3336,
+          "externalPort": 0,
+          "protocol": "TCP",
+          "tls": false,
+          "useUpnp": false,
+          "upnpMappedPort": 0,
+          "enabled": true,
+          "description": "HTTP服务",
+          "lastError": "",
+          "updatedAt": "0001-01-01T00:00:00Z"
+        }
+      ],
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "DeviceID": 3,
+      "name": "NAS",
+      "ip": "192.168.100.151",
+      "services": [
+        {
+          "id": 1,
+          "name": "NAS",
+          "internalPort": 5666,
+          "externalPort": 0,
+          "protocol": "TCP",
+          "tls": false,
+          "useUpnp": false,
+          "upnpMappedPort": 0,
+          "enabled": true,
+          "description": "NAS",
+          "lastError": "",
+          "updatedAt": "0001-01-01T00:00:00Z"
+        }
+      ],
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "DeviceID": 3,
+      "name": "NAS",
+      "ip": "192.168.100.126",
+      "services": [
+        {
+          "id": 1,
+          "name": "ubuntu24",
+          "internalPort": 22,
+          "externalPort": 0,
+          "protocol": "ssh",
+          "tls": false,
+          "useUpnp": false,
+          "upnpMappedPort": 0,
+          "enabled": true,
+          "description": "NAS",
+          "lastError": "",
+          "updatedAt": "0001-01-01T00:00:00Z"
+        }
+      ],
+      "createdAt": "0001-01-01T00:00:00Z",
+      "updatedAt": "0001-01-01T00:00:00Z"
+    }
+  ],
+  "stunServerList": [
+    "stun.radiojar.com:3478",
+    "stun.ringostat.com:3478",
+    "stun.irishvoip.com:3478",
+    "stun.voipgate.com:3478",
+    "stun.tula.nu:3478",
+    "stun.yesdates.com:3478",
+    "stun.telnyx.com:3478",
+    "stun.vavadating.com:3478",
+    "stun.bau-ha.us:3478",
+    "stun.bridesbay.com:3478",
+    "stun.3wayint.com:3478",
+    "stun.finsterwalder.com:3478",
+    "stun.romaaeterna.nl:3478",
+    "stun.fitauto.ru:3478",
+    "stun.antisip.com:3478",
+    "stun.heeds.eu:3478",
+    "stun.hot-chilli.net:3478",
+    "stun.eurosys.be:3478",
+    "stun.vincross.com:3478",
+    "stun.cibercloud.com.br:3478",
+    "stun.siptrunk.com:3478"
+  ]
+}

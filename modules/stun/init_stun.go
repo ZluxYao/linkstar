@@ -20,6 +20,20 @@ var (
 )
 
 func InitSTUN() error {
+	var err error
+
+	// 读取stun配置文件
+	global.StunConfig, err = ReadStunConfig()
+	if err != nil {
+		logrus.Fatal("读取配置文件失败", err)
+	}
+	// 监听退出保持配置文件
+	go SetupShutdownHook(func() {
+		err := UpdateStunConfig(global.StunConfig)
+		if err != nil {
+			logrus.Error("保存配置失败：", err)
+		}
+	})
 
 	// go func() {
 	// 	for {
@@ -122,70 +136,33 @@ func InitSTUN() error {
 	// 	},
 	// })
 
-	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
-		DeviceID: 2,
-		Name:     "本机",
-		IP:       global.StunConfig.LocalIP,
-		Services: []model.Service{
-			{
-				ID:           1,
-				Name:         "STUN panel",
-				InternalPort: 3336,
-				ExternalPort: 0,
-				Protocol:     "TCP",
-				Tlss:         false,
-				Enabled:      true,
-				Description:  "HTTP服务",
-			},
-			// {
-			// 	ID:           1,
-			// 	Name:         "7070",
-			// 	InternalPort: 7070,
-			// 	ExternalPort: 0,
-			// 	Protocol:     "TCP",
-			// 	Tlss:         false,
-			// 	Enabled:      true,
-			// 	Description:  "HTTP服务",
-			// },
-		},
-	})
-
-	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
-		DeviceID: 3,
-		Name:     "NAS",
-		IP:       "192.168.100.151",
-		Services: []model.Service{
-			{
-				ID:           1,
-				Name:         "NAS",
-				InternalPort: 5666,
-				ExternalPort: 0,
-				Protocol:     "TCP",
-				Tlss:         false,
-				Enabled:      true,
-				Description:  "NAS",
-			},
-		},
-	})
-
-	global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
-		DeviceID: 3,
-		Name:     "NAS",
-		IP:       "192.168.100.126",
-		Services: []model.Service{
-			{
-				ID:           1,
-				Name:         "ubuntu24",
-				InternalPort: 22,
-				ExternalPort: 0,
-				Protocol:     "ssh",
-
-				Tlss:        false,
-				Enabled:     true,
-				Description: "NAS",
-			},
-		},
-	})
+	// global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
+	// 	DeviceID: 2,
+	// 	Name:     "本机",
+	// 	IP:       global.StunConfig.LocalIP,
+	// 	Services: []model.Service{
+	// 		{
+	// 			ID:           1,
+	// 			Name:         "STUN panel",
+	// 			InternalPort: 3336,
+	// 			ExternalPort: 0,
+	// 			Protocol:     "TCP",
+	// 			TLS:          false,
+	// 			Enabled:      true,
+	// 			Description:  "HTTP服务",
+	// 		},
+	// 		// {
+	// 		// 	ID:           1,
+	// 		// 	Name:         "7070",
+	// 		// 	InternalPort: 7070,
+	// 		// 	ExternalPort: 0,
+	// 		// 	Protocol:     "TCP",
+	// 		// 	Tlss:         false,
+	// 		// 	Enabled:      true,
+	// 		// 	Description:  "HTTP服务",
+	// 		// },
+	// 	},
+	// })
 
 	// 3. 配置所有服务的STUN映射
 	if err := StarStun(global.StunConfig.Devices); err != nil {
@@ -591,7 +568,7 @@ func buildDevicesHTML(devices []model.Device) string {
 					enabledStr = `<span class="service-disabled">❌ 已禁用</span>`
 				}
 				tlsStr := ""
-				if svc.Tlss {
+				if svc.TLS {
 					tlsStr = " 🔒"
 				}
 
