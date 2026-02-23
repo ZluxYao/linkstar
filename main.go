@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	"linkstar/core"
 	"linkstar/modules/stun"
 	"linkstar/routers"
@@ -8,6 +9,9 @@ import (
 
 	"github.com/sirupsen/logrus"
 )
+
+//go:embed web
+var webFS embed.FS
 
 func main() {
 	// 设置时区
@@ -17,6 +21,6 @@ func main() {
 
 	stun.InitSTUN()
 
-	routers.Run()
-	select {}
+	routers.Run(webFS)
+
 }

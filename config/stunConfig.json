@@ -1,6 +1,6 @@
 {
   "localIP": "192.168.100.187",
-  "publicIP": "14.19.66.252",
+  "publicIP": "14.19.98.182",
   "natRouterList": [
     {
       "natLevel": 1,
@@ -15,9 +15,9 @@
       "lanIP": "100.72.0.1"
     }
   ],
-  "bestStun": "stun.tula.nu:3478",
-  "createdAt": "2026-02-20T23:28:57.2429459+08:00",
-  "updatedAt": "2026-02-20T23:29:16.3623271+08:00",
+  "bestStun": "stun.antisip.com:3478",
+  "createdAt": "2026-02-23T20:22:08.6776502+08:00",
+  "updatedAt": "2026-02-23T20:35:51.4701926+08:00",
   "devices": [
     {
       "DeviceID": 2,
@@ -27,7 +27,7 @@
         {
           "id": 1,
           "name": "STUN panel",
-          "internalPort": 3336,
+          "internalPort": 3333,
           "externalPort": 0,
           "protocol": "TCP",
           "tls": false,
