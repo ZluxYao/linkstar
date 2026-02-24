@@ -31,4 +31,11 @@ func StunRouters(g *gin.RouterGroup) {
 		app.StunServiceUpdateView,
 	)
 
+	// 删除服务
+	g.DELETE(
+		"stun/service/delete",
+		middleware.BindJsonMiddleware[stun_api.StunServiceDeleteViewRequest],
+		app.StunServiceDeleteView,
+	)
+
 }

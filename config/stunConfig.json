@@ -1,10 +1,23 @@
 {
   "localIP": "192.168.100.187",
-  "publicIP": "",
-  "natRouterList": null,
-  "bestStun": "",
-  "createdAt": "2026-02-24T01:24:06.0528725+08:00",
-  "updatedAt": "2026-02-24T01:24:43.0989761+08:00",
+  "publicIP": "14.19.59.90",
+  "natRouterList": [
+    {
+      "natLevel": 1,
+      "lanIP": "192.168.100.1"
+    },
+    {
+      "natLevel": 2,
+      "lanIP": "192.168.31.1"
+    },
+    {
+      "natLevel": 3,
+      "lanIP": "100.72.0.1"
+    }
+  ],
+  "bestStun": "stun.ringostat.com:3478",
+  "createdAt": "2026-02-25T02:08:53.6040031+08:00",
+  "updatedAt": "2026-02-25T02:09:18.5736512+08:00",
   "devices": [
     {
       "DeviceID": 2,
@@ -15,7 +28,7 @@
           "id": 1,
           "name": "Link Star",
           "internalPort": 3333,
-          "externalPort": 43997,
+          "externalPort": 23641,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
@@ -30,7 +43,7 @@
           "id": 2,
           "name": "Link Star2",
           "internalPort": 5500,
-          "externalPort": 43996,
+          "externalPort": 23640,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
@@ -45,22 +58,7 @@
           "id": 3,
           "name": "Link Star2",
           "internalPort": 5500,
-          "externalPort": 43995,
-          "protocol": "TCP",
-          "tls": false,
-          "useUpnp": false,
-          "upnpMappedPort": 0,
-          "enabled": true,
-          "description": "HTTP服务",
-          "punchSuccess": true,
-          "lastError": "",
-          "updatedAt": "0001-01-01T00:00:00Z"
-        },
-        {
-          "id": 4,
-          "name": "Link Star2",
-          "internalPort": 5500,
-          "externalPort": 43994,
+          "externalPort": 23639,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
@@ -84,16 +82,31 @@
           "id": 1,
           "name": "FN OS",
           "internalPort": 5667,
-          "externalPort": 43998,
+          "externalPort": 23638,
           "protocol": "TCP",
-          "tls": false,
+          "tls": true,
           "useUpnp": false,
           "upnpMappedPort": 0,
           "enabled": true,
           "description": "NAS",
           "punchSuccess": true,
           "lastError": "",
-          "updatedAt": "0001-01-01T00:00:00Z"
+          "updatedAt": "2026-02-25T02:05:44.9084801+08:00"
+        },
+        {
+          "id": 2,
+          "name": "lucky",
+          "internalPort": 16666,
+          "externalPort": 23643,
+          "protocol": "TCP",
+          "tls": false,
+          "useUpnp": true,
+          "upnpMappedPort": 0,
+          "enabled": true,
+          "description": "",
+          "punchSuccess": true,
+          "lastError": "",
+          "updatedAt": "2026-02-25T02:05:28.6585062+08:00"
         }
       ],
       "createdAt": "0001-01-01T00:00:00Z",

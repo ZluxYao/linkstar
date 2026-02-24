@@ -377,6 +377,154 @@
             pointer-events: none;
             z-index: 9999;
         }
+
+        /* ================= 模态框 ================= */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: var(--radius-md);
+            padding: 28px;
+            width: 480px;
+            max-width: 95vw;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            position: relative;
+        }
+
+        .modal-title {
+            font-size: 17px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-desc);
+            margin-bottom: 5px;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="number"],
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 14px;
+            color: var(--text-main);
+            background: #fff;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--primary);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .form-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .form-check input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn-cancel {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            color: var(--text-main);
+            transition: all 0.2s;
+        }
+
+        .btn-cancel:hover {
+            background: var(--bg-page);
+        }
+
+        .btn-submit {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-submit:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-submit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-action.edit {
+            background: #f0fdf4;
+            border-color: #86efac;
+            color: #16a34a;
+        }
+
+        .btn-action.edit:hover {
+            background: #dcfce7;
+        }
+
+        .btn-action.danger {
+            background: #fff5f5;
+            border-color: #fca5a5;
+            color: #dc2626;
+        }
+
+        .btn-action.danger:hover {
+            background: #fee2e2;
+        }
     </style>
 </head>
 
@@ -393,9 +541,190 @@
 
     <div id="toast">已复制到剪贴板</div>
 
+    <!-- 服务表单模态框（添加 / 编辑共用） -->
+    <div class="modal-overlay" id="serviceModal">
+        <div class="modal">
+            <div class="modal-title" id="modalTitle">➕ 添加服务</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>服务名称 *</label>
+                    <input type="text" id="f-name" placeholder="如 SSH / Web管理">
+                </div>
+                <div class="form-group">
+                    <label>内网端口 *</label>
+                    <input type="number" id="f-internalPort" placeholder="如 22" min="1" max="65535">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>协议类型</label>
+                    <select id="f-protocol">
+                        <option value="TCP">TCP</option>
+                        <option value="UDP">UDP</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>UPnP 映射端口</label>
+                    <input type="number" id="f-upnpMappedPort" placeholder="0 表示自动" min="0" max="65535">
+                </div>
+            </div>
+            <div class="form-row" style="margin-bottom:14px;">
+                <div class="form-check">
+                    <input type="checkbox" id="f-useUpnp" checked>
+                    <label for="f-useUpnp">启用 UPnP 自动映射</label>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" id="f-tls">
+                    <label for="f-tls">启用 TLS 证书</label>
+                </div>
+                <div class="form-check">
+                    <input type="checkbox" id="f-enabled" checked>
+                    <label for="f-enabled">启用服务</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>描述（可选）</label>
+                <input type="text" id="f-description" placeholder="服务描述信息">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+                <button class="btn-submit" id="modalSubmitBtn" onclick="submitServiceForm()">确认</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // 全局状态管理
         let globalData = null;
+        let modalMode = 'add';       // 'add' | 'edit'
+        let modalDeviceIndex = -1;   // 当前操作的设备索引
+        let modalServiceId = null;   // 编辑时的服务ID
+
+        // ================= 模态框控制 =================
+        function openAddModal(deviceIndex) {
+            modalMode = 'add';
+            modalDeviceIndex = deviceIndex;
+            modalServiceId = null;
+            document.getElementById('modalTitle').textContent = '➕ 添加服务';
+            document.getElementById('f-name').value = '';
+            document.getElementById('f-internalPort').value = '';
+            document.getElementById('f-protocol').value = 'TCP';
+            document.getElementById('f-upnpMappedPort').value = '0';
+            document.getElementById('f-useUpnp').checked = true;
+            document.getElementById('f-tls').checked = false;
+            document.getElementById('f-enabled').checked = true;
+            document.getElementById('f-description').value = '';
+            document.getElementById('modalSubmitBtn').textContent = '添加';
+            document.getElementById('serviceModal').classList.add('active');
+        }
+
+        function openEditModal(deviceIndex, serviceId) {
+            const device = globalData.devices[deviceIndex];
+            const svc = device.services.find(s => s.id === serviceId);
+            if (!svc) return;
+            modalMode = 'edit';
+            modalDeviceIndex = deviceIndex;
+            modalServiceId = serviceId;
+            document.getElementById('modalTitle').textContent = '✏️ 编辑服务';
+            document.getElementById('f-name').value = svc.name || '';
+            document.getElementById('f-internalPort').value = svc.internalPort || '';
+            document.getElementById('f-protocol').value = svc.protocol || 'TCP';
+            document.getElementById('f-upnpMappedPort').value = svc.upnpMappedPort || 0;
+            document.getElementById('f-useUpnp').checked = !!svc.useUpnp;
+            document.getElementById('f-tls').checked = !!svc.tls;
+            document.getElementById('f-enabled').checked = svc.enabled !== false;
+            document.getElementById('f-description').value = svc.description || '';
+            document.getElementById('modalSubmitBtn').textContent = '保存';
+            document.getElementById('serviceModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('serviceModal').classList.remove('active');
+        }
+
+        async function submitServiceForm() {
+            const name = document.getElementById('f-name').value.trim();
+            const internalPort = parseInt(document.getElementById('f-internalPort').value);
+            if (!name) { showToast('请填写服务名称'); return; }
+            if (!internalPort || internalPort < 1 || internalPort > 65535) { showToast('请填写有效的内网端口(1-65535)'); return; }
+
+            const device = globalData.devices[modalDeviceIndex];
+            const btn = document.getElementById('modalSubmitBtn');
+            btn.disabled = true;
+
+            const body = {
+                deviceId: device.DeviceID || device.deviceId || device.id,
+                name,
+                internalPort,
+                protocol: document.getElementById('f-protocol').value,
+                upnpMappedPort: parseInt(document.getElementById('f-upnpMappedPort').value) || 0,
+                useUpnp: document.getElementById('f-useUpnp').checked,
+                tls: document.getElementById('f-tls').checked,
+                enabled: document.getElementById('f-enabled').checked,
+                description: document.getElementById('f-description').value.trim(),
+            };
+
+            try {
+                let url, method;
+                if (modalMode === 'add') {
+                    url = '/api/stun/service/add';
+                    method = 'POST';
+                } else {
+                    url = '/api/stun/service/update';
+                    method = 'PUT';
+                    body.serviceId = modalServiceId;
+                }
+
+                const resp = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+                const result = await resp.json();
+                if (result.code === 0) {
+                    showToast(modalMode === 'add' ? '添加成功' : '保存成功');
+                    closeModal();
+                    await initDashboard();
+                } else {
+                    showToast('操作失败: ' + (result.msg || '未知错误'));
+                }
+            } catch (e) {
+                showToast('请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // 点击遮罩层关闭
+        document.getElementById('serviceModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        // ================= 删除服务 =================
+        async function deleteService(deviceIndex, serviceId, serviceName) {
+            if (!confirm(`确认删除服务「${serviceName}」？此操作不可撤销。`)) return;
+
+            const device = globalData.devices[deviceIndex];
+            try {
+                const resp = await fetch('/api/stun/service/delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        deviceId: device.DeviceID || device.deviceId || device.id,
+                        serviceId,
+                    }),
+                });
+                const result = await resp.json();
+                if (result.code === 0) {
+                    showToast('删除成功');
+                    await initDashboard();
+                } else {
+                    showToast('删除失败: ' + (result.msg || '未知错误'));
+                }
+            } catch (e) {
+                showToast('请求失败: ' + e.message);
+            }
+        }
 
         // ================= 1. 交互与工具函数 =================
         function showToast(msg) {
@@ -486,9 +815,13 @@
 
             const device = globalData.devices[index];
             const container = document.getElementById('services-grid-container');
+            const addBtn = document.getElementById('add-service-btn');
+            if (addBtn) {
+                addBtn.onclick = () => openAddModal(index);
+            }
 
             if (!device || !device.services || device.services.length === 0) {
-                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-desc); padding: 40px; background: var(--bg-module); border-radius: var(--radius-md);">该设备暂无服务配置</div>';
+                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-desc); padding: 40px; background: var(--bg-module); border-radius: var(--radius-md);">该设备暂无服务配置，点击右上角"添加服务"开始配置</div>';
                 return;
             }
 
@@ -533,8 +866,10 @@
                         <div class="card-header">
                             <i class="status-dot ${statusDot}"></i>
                             <span class="card-title">📦 ${srv.name || '未命名服务'}</span>
+                            <button class="btn-action edit" style="flex:none;padding:4px 10px;font-size:12px;margin-left:auto;" onclick="openEditModal(${index}, ${srv.id})">✏️ 编辑</button>
+                            <button class="btn-action danger" style="flex:none;padding:4px 10px;font-size:12px;" onclick="deleteService(${index}, ${srv.id}, '${srv.name.replace(/'/g, "\\'")}')">🗑️ 删除</button>
                         </div>
-                        
+
                         <div class="info-line">
                             <span class="label">协议类型</span>
                             <span class="value" style="display:flex;gap:6px;"><span class="svc-badge">${protocol}</span> ${upnpTag}</span>
@@ -547,7 +882,7 @@
                             <span class="label">穿透状态</span>
                             <span class="value">${statusText}</span>
                         </div>
-                        
+
                         ${errorHtml}
                         ${extAddrHtml}
 
@@ -603,10 +938,12 @@
                             <div style="font-size: 13px; color: var(--text-desc); padding: 4px 8px 8px 8px; border-bottom: 1px dashed var(--border-color); margin-bottom: 8px;">设备列表</div>
                             ${devicesHtml}
                         </div>
-                        
+
                         <div>
-                            <div class="services-grid" id="services-grid-container">
-                                </div>
+                            <div style="display:flex; justify-content:flex-end; margin-bottom:12px;">
+                                <button class="btn-main" id="add-service-btn">➕ 添加服务</button>
+                            </div>
+                            <div class="services-grid" id="services-grid-container"></div>
                         </div>
                     </div>
                 </div>
