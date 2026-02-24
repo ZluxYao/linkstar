@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cat d:/1_Study/Project/Active/LinkStar/linkstar/routers/*.go)",
-      "Bash(find d:/1_Study/Project/Active/LinkStar/linkstar/routers -type f -exec cat {} ;)"
+      "Bash(find d:/1_Study/Project/Active/LinkStar/linkstar/routers -type f -exec cat {} ;)",
+      "Bash(go build ./...)",
+      "Bash(git add api/stun_api/stun_service_add.go api/stun_api/stun_service_delete.go api/stun_api/stun_service_update.go api/stun_api/stun_device_add.go modules/stun/init_stun.go modules/stun/stun.go modules/stun/stun_config.go modules/stun/service_manager.go routers/stun_routers.go web/dist/index.html main.go)"
     ]
   }
 }

@@ -15,9 +15,9 @@
       "lanIP": "100.72.0.1"
     }
   ],
-  "bestStun": "stun.ringostat.com:3478",
-  "createdAt": "2026-02-25T02:08:53.6040031+08:00",
-  "updatedAt": "2026-02-25T02:09:18.5736512+08:00",
+  "bestStun": "stun.tula.nu:3478",
+  "createdAt": "2026-02-25T02:17:15.3934423+08:00",
+  "updatedAt": "2026-02-25T02:17:25.9025037+08:00",
   "devices": [
     {
       "DeviceID": 2,
@@ -28,7 +28,7 @@
           "id": 1,
           "name": "Link Star",
           "internalPort": 3333,
-          "externalPort": 23641,
+          "externalPort": 20584,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
@@ -43,7 +43,7 @@
           "id": 2,
           "name": "Link Star2",
           "internalPort": 5500,
-          "externalPort": 23640,
+          "externalPort": 20582,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
@@ -58,7 +58,7 @@
           "id": 3,
           "name": "Link Star2",
           "internalPort": 5500,
-          "externalPort": 23639,
+          "externalPort": 20583,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
@@ -67,7 +67,7 @@
           "description": "HTTP服务",
           "punchSuccess": true,
           "lastError": "",
-          "updatedAt": "0001-01-01T00:00:00Z"
+          "updatedAt": "2026-02-25T02:15:18.30417+08:00"
         }
       ],
       "createdAt": "0001-01-01T00:00:00Z",
@@ -82,7 +82,7 @@
           "id": 1,
           "name": "FN OS",
           "internalPort": 5667,
-          "externalPort": 23638,
+          "externalPort": 20585,
           "protocol": "TCP",
           "tls": true,
           "useUpnp": false,
@@ -97,7 +97,7 @@
           "id": 2,
           "name": "lucky",
           "internalPort": 16666,
-          "externalPort": 23643,
+          "externalPort": 20586,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": true,
