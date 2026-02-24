@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat d:/1_Study/Project/Active/LinkStar/linkstar/routers/*.go)",
+      "Bash(find d:/1_Study/Project/Active/LinkStar/linkstar/routers -type f -exec cat {} ;)"
+    ]
+  }
+}
