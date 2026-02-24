@@ -24,6 +24,13 @@ func StunRouters(g *gin.RouterGroup) {
 		app.StunServiceAddView,
 	)
 
+	// 新增设备
+	g.POST(
+		"stun/device/add",
+		middleware.BindJsonMiddleware[stun_api.StunDeviceAddViewRequest],
+		app.StunDeviceAddView,
+	)
+
 	// 修改服务
 	g.PUT(
 		"stun/service/update",

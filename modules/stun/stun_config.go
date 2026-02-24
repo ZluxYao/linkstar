@@ -44,6 +44,12 @@ func createStunConfig() (model.StunConfig, error) {
 	config.CreatedAt = time.Now()
 	config.UpdatedAt = time.Now()
 
+	// 确保 config 目录存在
+	if err := os.MkdirAll("config", 0755); err != nil {
+		logrus.Error("创建config目录失败：", err)
+		return config, err
+	}
+
 	// 写入一个空的配置文件
 	if err := utilsFile.WriteJsonFile(stunConfigPath, config); err != nil {
 		logrus.Error("StunConfig写入失败：", err)

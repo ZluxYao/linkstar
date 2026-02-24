@@ -3,7 +3,6 @@ package stun
 import (
 	"fmt"
 	"linkstar/global"
-	"log"
 	"time"
 
 	"github.com/huin/goupnp/dcps/internetgateway1"
@@ -98,12 +97,8 @@ func InitSTUN() error {
 	fmt.Println("本地ip:", global.StunConfig.LocalIP, "当前公网ip", global.StunConfig.PublicIP)
 	fmt.Println("网络拓扑图", global.StunConfig.NatRouterList)
 
-	// 3. 配置所有服务的STUN映射（协程启动）
-	go func() {
-		if err := StarStun(global.StunConfig.Devices); err != nil {
-			log.Printf("配置服务失败: %v", err)
-		}
-	}()
+	// 3. 启动所有服务的STUN映射（协程启动）
+	go StartAllServices()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
 	return nil

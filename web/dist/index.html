@@ -541,6 +541,25 @@
 
     <div id="toast">已复制到剪贴板</div>
 
+    <!-- 添加设备模态框 -->
+    <div class="modal-overlay" id="deviceModal">
+        <div class="modal">
+            <div class="modal-title">🖥️ 添加设备</div>
+            <div class="form-group">
+                <label>设备名称 *</label>
+                <input type="text" id="d-name" placeholder="如 群晖NAS / 树莓派">
+            </div>
+            <div class="form-group">
+                <label>设备内网 IP *</label>
+                <input type="text" id="d-ip" placeholder="如 192.168.1.100">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeDeviceModal()">取消</button>
+                <button class="btn-submit" id="deviceSubmitBtn" onclick="submitDeviceForm()">添加</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 服务表单模态框（添加 / 编辑共用） -->
     <div class="modal-overlay" id="serviceModal">
         <div class="modal">
@@ -599,6 +618,49 @@
         let modalMode = 'add';       // 'add' | 'edit'
         let modalDeviceIndex = -1;   // 当前操作的设备索引
         let modalServiceId = null;   // 编辑时的服务ID
+
+        // ================= 添加设备 =================
+        function openDeviceModal() {
+            document.getElementById('d-name').value = '';
+            document.getElementById('d-ip').value = '';
+            document.getElementById('deviceModal').classList.add('active');
+        }
+
+        function closeDeviceModal() {
+            document.getElementById('deviceModal').classList.remove('active');
+        }
+
+        async function submitDeviceForm() {
+            const name = document.getElementById('d-name').value.trim();
+            const ip = document.getElementById('d-ip').value.trim();
+            if (!name || !ip) { showToast('设备名称和IP不能为空'); return; }
+
+            const btn = document.getElementById('deviceSubmitBtn');
+            btn.disabled = true;
+            try {
+                const resp = await fetch('/api/stun/device/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, ip }),
+                });
+                const result = await resp.json();
+                if (result.code === 0) {
+                    showToast('设备添加成功');
+                    closeDeviceModal();
+                    await initDashboard();
+                } else {
+                    showToast('添加失败: ' + (result.msg || '未知错误'));
+                }
+            } catch (e) {
+                showToast('请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('deviceModal').addEventListener('click', function(e) {
+            if (e.target === this) closeDeviceModal();
+        });
 
         // ================= 模态框控制 =================
         function openAddModal(deviceIndex) {
@@ -935,7 +997,10 @@
                     <div class="section-title">设备管理与服务状态</div>
                     <div class="device-layout">
                         <div class="device-list-container">
-                            <div style="font-size: 13px; color: var(--text-desc); padding: 4px 8px 8px 8px; border-bottom: 1px dashed var(--border-color); margin-bottom: 8px;">设备列表</div>
+                            <div style="font-size: 13px; color: var(--text-desc); padding: 4px 8px 8px 8px; border-bottom: 1px dashed var(--border-color); margin-bottom: 8px; display:flex; justify-content:space-between; align-items:center;">
+                                <span>设备列表</span>
+                                <button class="btn-main" style="font-size:12px;padding:4px 10px;" onclick="openDeviceModal()">➕ 添加设备</button>
+                            </div>
                             ${devicesHtml}
                         </div>
 

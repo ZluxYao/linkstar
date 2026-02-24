@@ -1,6 +1,7 @@
 package stun
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"linkstar/global"
@@ -83,6 +84,126 @@ func StarStun(devices []model.Device) error {
 
 	// 阻塞等待第一个严重错误（如果所有服务都正常运行，会一直阻塞）
 	return <-errChan
+}
+
+// RunStunTunnelWithContext 支持 context 取消的穿透逻辑（供 service_manager 使用）
+func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *model.Service) error {
+	protocol := strings.ToLower(service.Protocol)
+	if protocol == "ssh" {
+		protocol = "tcp"
+	}
+	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
+
+	stunConn, err := reuseport.Dial(protocol, localAddr, global.StunConfig.BestSTUN)
+	if err != nil {
+		return fmt.Errorf("STUN拨号失败 [%s]:%w", global.StunConfig.BestSTUN, err)
+	}
+
+	var localPort uint16
+	if protocol == "tcp" {
+		localPort = uint16(stunConn.LocalAddr().(*net.TCPAddr).Port)
+	} else {
+		localPort = uint16(stunConn.LocalAddr().(*net.UDPAddr).Port)
+	}
+
+	var publicIP string
+	var publicPort int
+	if protocol == "tcp" {
+		publicIP, publicPort, err = doTcpStunHandshake(stunConn)
+	} else {
+		udpConn := stunConn.(*net.UDPConn)
+		stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
+		publicIP, publicPort, err = doUDPStunHandshake(udpConn, stunServerAddr)
+	}
+	if err != nil {
+		stunConn.Close()
+		return fmt.Errorf("与STUN服务器握手失败:%w", err)
+	}
+
+	listenAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
+	listener, err := reuseport.Listen(protocol, listenAddr)
+	if err != nil {
+		stunConn.Close()
+		return fmt.Errorf("端口监听失败：%w", err)
+	}
+
+	go func() {
+		description := fmt.Sprintf("LinkStar-%s", service.Name)
+		err := AddPortMapping(localPort, localPort, "TCP", description)
+		if err != nil {
+			logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
+		} else {
+			logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
+		}
+	}()
+
+	// ctx 取消时关闭连接，让所有阻塞调用立即返回
+	go func() {
+		<-ctx.Done()
+		logrus.Infof("[%s] ctx 取消，关闭连接", service.Name)
+		stunConn.Close()
+		listener.Close()
+	}()
+
+	defer func() {
+		logrus.Infof("[%s] 正在清理资源...", service.Name)
+		stunConn.Close()
+		listener.Close()
+		go DeletePortMapping(localPort, protocol)
+		service.PunchSuccess = false
+		service.ExternalPort = 0
+	}()
+
+	errCh := make(chan error, 3)
+	logrus.Infof("%v %v %v", localPort, publicIP, publicPort)
+
+	var publicURL string
+	if service.TLS {
+		publicURL = fmt.Sprintf("https://%s:%d", publicIP, publicPort)
+	} else {
+		publicURL = fmt.Sprintf("http://%s:%d", publicIP, publicPort)
+	}
+
+	service.ExternalPort = uint16(publicPort)
+	service.PunchSuccess = true
+
+	if protocol == "tcp" {
+		go func() {
+			service.StartupSuccess = true
+			err = tcpStunHealthCheck(stunConn, publicURL, publicIP, publicPort, localPort, service)
+			if err != nil {
+				service.PunchSuccess = false
+				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
+			}
+		}()
+	} else {
+		go func() {
+			service.StartupSuccess = true
+			udpConn := stunConn.(*net.UDPConn)
+			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
+			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
+			if err != nil {
+				service.PunchSuccess = false
+				errCh <- fmt.Errorf("UDP健康检查失败: %w", err)
+			}
+		}()
+	}
+
+	go func() {
+		targetAddr := fmt.Sprintf("%s:%d", targetIP, service.InternalPort)
+		for {
+			clientConn, err := listener.Accept()
+			if err != nil {
+				errCh <- fmt.Errorf("监听器退出: %w", err)
+				return
+			}
+			logrus.Infof("[%s] 收到外部连接: %s", service.Name, clientConn.RemoteAddr())
+			go Forward(clientConn, targetAddr, protocol)
+		}
+	}()
+
+	logrus.Infof("   访问地址: %s", publicURL)
+	return <-errCh
 }
 
 // 实现stun内网穿透逻辑

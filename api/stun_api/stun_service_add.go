@@ -76,5 +76,11 @@ func (StunApi) StunServiceAddView(c *gin.Context) {
 		return
 	}
 
+	// 启动该服务的 STUN 穿透
+	device := &global.StunConfig.Devices[deviceIndex]
+	services := device.Services
+	stun.StartService(device, &services[len(services)-1])
+
 	res.OkWithData(newService, c)
 }
+

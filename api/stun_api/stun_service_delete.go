@@ -56,5 +56,8 @@ func (StunApi) StunServiceDeleteView(c *gin.Context) {
 		return
 	}
 
+	// 停止该服务的 STUN 穿透
+	stun.StopService(cr.DeviceID, cr.ServiceID)
+
 	res.OkWithMsg("删除成功", c)
 }

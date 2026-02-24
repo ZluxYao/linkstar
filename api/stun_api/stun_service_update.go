@@ -73,5 +73,9 @@ func (StunApi) StunServiceUpdateView(c *gin.Context) {
 		return
 	}
 
+	// 重启该服务的 STUN 穿透（停旧起新）
+	device := &global.StunConfig.Devices[deviceIndex]
+	stun.StartService(device, &device.Services[serviceIndex])
+
 	res.OkWithData(*svc, c)
 }
