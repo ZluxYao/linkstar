@@ -21,8 +21,11 @@ func StarStun(devices []model.Device) error {
 	errChan := make(chan error, 1)
 	activeServices := 0
 
-	for _, device := range devices {
-		for _, service := range device.Services {
+	// 直接用下标遍历 global.StunConfig.Devices，确保拿到的是真实指针
+	for i := range global.StunConfig.Devices {
+		for j := range global.StunConfig.Devices[i].Services {
+			device := &global.StunConfig.Devices[i]
+			service := &global.StunConfig.Devices[i].Services[j]
 
 			// 未启用
 			if !service.Enabled {
@@ -33,7 +36,7 @@ func StarStun(devices []model.Device) error {
 			activeServices++
 
 			// 为每个服务创建单独进程
-			go func(device model.Device, service *model.Service) {
+			go func(device *model.Device, service *model.Service) {
 				maxRetries := 5
 				attempt := 0
 
@@ -68,7 +71,7 @@ func StarStun(devices []model.Device) error {
 						continue
 					}
 				}
-			}(device, &service)
+			}(device, service)
 		}
 	}
 
@@ -155,11 +158,16 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 		publicURL = fmt.Sprintf("http://%s:%d", publicIP, publicPort)
 	}
 
+	// 穿透成功，直接通过指针更新 service 的公网端口和成功状态
+	service.ExternalPort = uint16(publicPort)
+	service.PunchSuccess = true
+
 	if protocol == "tcp" {
 		go func() {
 			service.StartupSuccess = true
 			err = tcpStunHealthCheck(stunConn, publicURL, publicIP, publicPort, localPort, service)
 			if err != nil {
+				service.PunchSuccess = false
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
 			}
 		}()
@@ -170,6 +178,7 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
 			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
 			if err != nil {
+				service.PunchSuccess = false
 				errCh <- fmt.Errorf("UDP健康检查失败: %w", err)
 			}
 		}()

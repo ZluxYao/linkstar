@@ -42,8 +42,9 @@ type Service struct {
 	Enabled     bool   `json:"enabled"`     // 服务是否启用 (默认 true)
 	Description string `json:"description"` // 服务描述信息 (可选)
 
-	LastError string    `json:"lastError"` // 最后一次操作的错误信息
-	UpdatedAt time.Time `json:"updatedAt"` // 最后更新时间
+	PunchSuccess bool      `json:"punchSuccess"` // STUN穿透是否成功
+	LastError    string    `json:"lastError"`    // 最后一次操作的错误信息
+	UpdatedAt    time.Time `json:"updatedAt"`    // 最后更新时间
 }
 
 // 每个Nat路由信息

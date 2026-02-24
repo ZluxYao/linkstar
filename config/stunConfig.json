@@ -1,23 +1,10 @@
 {
   "localIP": "192.168.100.187",
-  "publicIP": "14.19.98.182",
-  "natRouterList": [
-    {
-      "natLevel": 1,
-      "lanIP": "192.168.100.1"
-    },
-    {
-      "natLevel": 2,
-      "lanIP": "192.168.31.1"
-    },
-    {
-      "natLevel": 3,
-      "lanIP": "100.72.0.1"
-    }
-  ],
-  "bestStun": "stun.antisip.com:3478",
-  "createdAt": "2026-02-23T20:22:08.6776502+08:00",
-  "updatedAt": "2026-02-23T20:35:51.4701926+08:00",
+  "publicIP": "",
+  "natRouterList": null,
+  "bestStun": "",
+  "createdAt": "2026-02-24T01:24:06.0528725+08:00",
+  "updatedAt": "2026-02-24T01:24:43.0989761+08:00",
   "devices": [
     {
       "DeviceID": 2,
@@ -26,15 +13,61 @@
       "services": [
         {
           "id": 1,
-          "name": "STUN panel",
+          "name": "Link Star",
           "internalPort": 3333,
-          "externalPort": 0,
+          "externalPort": 43997,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
           "upnpMappedPort": 0,
-          "enabled": true,
+          "enabled": false,
           "description": "HTTP服务",
+          "punchSuccess": true,
+          "lastError": "",
+          "updatedAt": "0001-01-01T00:00:00Z"
+        },
+        {
+          "id": 2,
+          "name": "Link Star2",
+          "internalPort": 5500,
+          "externalPort": 43996,
+          "protocol": "TCP",
+          "tls": false,
+          "useUpnp": false,
+          "upnpMappedPort": 0,
+          "enabled": false,
+          "description": "HTTP服务",
+          "punchSuccess": true,
+          "lastError": "",
+          "updatedAt": "0001-01-01T00:00:00Z"
+        },
+        {
+          "id": 3,
+          "name": "Link Star2",
+          "internalPort": 5500,
+          "externalPort": 43995,
+          "protocol": "TCP",
+          "tls": false,
+          "useUpnp": false,
+          "upnpMappedPort": 0,
+          "enabled": false,
+          "description": "HTTP服务",
+          "punchSuccess": true,
+          "lastError": "",
+          "updatedAt": "0001-01-01T00:00:00Z"
+        },
+        {
+          "id": 4,
+          "name": "Link Star2",
+          "internalPort": 5500,
+          "externalPort": 43994,
+          "protocol": "TCP",
+          "tls": false,
+          "useUpnp": false,
+          "upnpMappedPort": 0,
+          "enabled": false,
+          "description": "HTTP服务",
+          "punchSuccess": true,
           "lastError": "",
           "updatedAt": "0001-01-01T00:00:00Z"
         }
@@ -49,15 +82,16 @@
       "services": [
         {
           "id": 1,
-          "name": "NAS",
-          "internalPort": 5666,
-          "externalPort": 0,
+          "name": "FN OS",
+          "internalPort": 5667,
+          "externalPort": 43998,
           "protocol": "TCP",
           "tls": false,
           "useUpnp": false,
           "upnpMappedPort": 0,
-          "enabled": true,
+          "enabled": false,
           "description": "NAS",
+          "punchSuccess": true,
           "lastError": "",
           "updatedAt": "0001-01-01T00:00:00Z"
         }
@@ -67,20 +101,21 @@
     },
     {
       "DeviceID": 3,
-      "name": "NAS",
+      "name": "ubuntu24",
       "ip": "192.168.100.126",
       "services": [
         {
           "id": 1,
-          "name": "ubuntu24",
+          "name": "ubuntu24-ssh",
           "internalPort": 22,
-          "externalPort": 0,
+          "externalPort": 43999,
           "protocol": "ssh",
           "tls": false,
           "useUpnp": false,
           "upnpMappedPort": 0,
-          "enabled": true,
-          "description": "NAS",
+          "enabled": false,
+          "description": "ubuntu24-ssh",
+          "punchSuccess": true,
           "lastError": "",
           "updatedAt": "0001-01-01T00:00:00Z"
         }

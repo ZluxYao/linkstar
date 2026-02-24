@@ -4,8 +4,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>STUN 配置</title>
+    <title>STUN 节点管理面板</title>
     <style>
+        /* ================= 核心变量与全局样式 ================= */
+        :root {
+            --bg-page: #f0f2f5;
+            --bg-module: #ffffff;
+            --bg-submodule: #f8fafc;
+            --border-color: #e2e8f0;
+            --text-main: #1e293b;
+            --text-desc: #64748b;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,137 +31,595 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            padding: 24px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .btn-main {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-main:hover {
+            background-color: var(--primary-hover);
+        }
+
+        #dashboard {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            border-left: 4px solid var(--primary);
+            padding-left: 8px;
+        }
+
+        /* ================= 基础卡片 ================= */
+        .module-card {
+            background: var(--bg-module);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .info-line {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .info-line .label {
+            color: var(--text-desc);
+        }
+
+        .info-line .value {
+            font-weight: 500;
+            font-family: monospace;
+        }
+
+        /* ================= 网络拓扑图 ================= */
+        .topology-container {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+            padding: 16px;
+            background: var(--bg-submodule);
+            border-radius: var(--radius-sm);
+            border: 1px dashed #cbd5e1;
+        }
+
+        .topo-node {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            padding: 10px 16px;
+            border-radius: var(--radius-sm);
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            min-width: 120px;
+        }
+
+        .topo-node span {
+            display: block;
+            margin-top: 4px;
+            font-size: 12px;
+            color: var(--text-desc);
+            font-family: monospace;
+            font-weight: normal;
+        }
+
+        .topo-arrow {
+            color: #94a3b8;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .topo-node.local {
+            border-color: #93c5fd;
+            background: #eff6ff;
+        }
+
+        .topo-node.internet {
+            border-color: #86efac;
+            background: #f0fdf4;
+        }
+
+        .topo-node.router {
+            border-color: #fde047;
+            background: #fefce8;
+        }
+
+        /* ================= 两栏布局 (设备管理与拓扑) ================= */
+        .device-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 24px;
+            align-items: start;
+        }
+
+        @media (max-width: 768px) {
+            .device-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 左侧：设备列表 */
+        .device-list-container {
+            background: var(--bg-module);
+            border-radius: var(--radius-md);
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .device-item {
+            padding: 12px 16px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            border: 1px solid transparent;
+        }
+
+        .device-item:hover {
+            background: var(--bg-submodule);
+        }
+
+        .device-item.active {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1d4ed8;
+        }
+
+        .device-item-name {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .device-item-ip {
+            font-size: 12px;
+            color: var(--text-desc);
+            font-family: monospace;
+        }
+
+        /* 右侧：服务大矩形卡片 */
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            /* 矩形宽度更大 */
+            gap: 16px;
+        }
+
+        .service-card {
+            background: var(--bg-module);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            transition: all 0.2s;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .service-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--primary);
+            box-shadow: var(--shadow-md);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-title {
+            font-weight: 600;
+            font-size: 16px;
+            color: var(--text-main);
+        }
+
+        .svc-badge {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #e0f2fe;
+            color: #0369a1;
+            font-weight: bold;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-on {
+            background-color: var(--success);
+            box-shadow: 0 0 4px var(--success);
+        }
+
+        .status-off {
+            background-color: var(--danger);
+            box-shadow: 0 0 4px var(--danger);
+        }
+
+        .ext-addr {
+            font-family: monospace;
+            color: var(--primary);
+            font-weight: 600;
+            font-size: 16px;
+            background: var(--bg-submodule);
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+            border: 1px dashed #cbd5e1;
+            margin: 12px 0;
+            word-break: break-all;
+        }
+
+        .ext-addr.empty {
+            color: var(--text-desc);
+            font-size: 14px;
+            background: #f1f5f9;
+        }
+
+        .svc-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: auto;
+        }
+
+        .btn-action {
+            flex: 1;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            color: var(--text-main);
+            font-weight: 500;
+            transition: all 0.2s;
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            gap: 6px;
         }
 
-        .container {
-            background: white;
-            border-radius: 16px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            max-width: 600px;
-            width: 100%;
+        .btn-action:hover {
+            background: var(--bg-page);
+            border-color: #94a3b8;
+        }
+
+        .btn-action.direct {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: var(--primary);
+        }
+
+        .btn-action.direct:hover {
+            background: #dbeafe;
+        }
+
+        .btn-action:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 状态提示 */
+        .status-message {
+            text-align: center;
             padding: 40px;
+            border-radius: var(--radius-md);
+            background: var(--bg-module);
+            box-shadow: var(--shadow-sm);
         }
 
-        h1 {
-            color: #333;
-            margin-bottom: 24px;
-            text-align: center;
-            font-size: 28px;
+        .status-message.error {
+            color: #ef4444;
+            border: 1px solid #fca5a5;
         }
 
-        .config-item {
-            background: #f7f9fc;
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 12px;
-        }
-
-        .config-item label {
-            display: block;
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 8px;
-            font-weight: 500;
-        }
-
-        .config-item .value {
-            color: #333;
-            font-size: 16px;
-            word-break: break-all;
-            font-family: 'Courier New', monospace;
-        }
-
-        .loading {
-            text-align: center;
-            color: #666;
-            padding: 40px;
-        }
-
-        .error {
-            background: #fee;
-            color: #c33;
-            padding: 16px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .refresh-btn {
-            background: #667eea;
+        /* 吐司提示框 */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            margin-top: 20px;
-            transition: background 0.3s;
-        }
-
-        .refresh-btn:hover {
-            background: #5568d3;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 9999;
         }
     </style>
 </head>
 
 <body>
-    <div class="container">
-        <h1>STUN 配置信息</h1>
-        <div id="content">
-            <div class="loading">加载中...</div>
-        </div>
-        <button class="refresh-btn" onclick="loadConfig()">刷新</button>
-    </div>
+
+    <header>
+        <h2>STUN 节点管理面板</h2>
+        <button class="btn-main" onclick="initDashboard()">🔄 刷新数据</button>
+    </header>
+
+    <main id="dashboard">
+        <div class="status-message loading">正在连接后端服务加载数据...</div>
+    </main>
+
+    <div id="toast">已复制到剪贴板</div>
 
     <script>
-        async function loadConfig() {
-            const content = document.getElementById('content');
+        // 全局状态管理
+        let globalData = null;
 
-            try {
-                const response = await fetch('/api/stun/config');
-                const result = await response.json();
+        // ================= 1. 交互与工具函数 =================
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.opacity = 1;
+            setTimeout(() => { toast.style.opacity = 0; }, 2000);
+        }
 
-                if (result.code === 0 && result.data) {
-                    const data = result.data;
-                    let html = '';
+        function copyAddress(address) {
+            if (!navigator.clipboard) {
+                const input = document.createElement('input');
+                input.value = address;
+                document.body.appendChild(input);
+                input.select();
+                document.execCommand('copy');
+                document.body.removeChild(input);
+                showToast(`已复制: ${address}`);
+                return;
+            }
+            navigator.clipboard.writeText(address).then(() => {
+                showToast(`已复制: ${address}`);
+            }).catch(err => {
+                showToast(`复制失败: ${err}`);
+            });
+        }
 
-                    if (data.StunServers && Array.isArray(data.StunServers)) {
-                        html += '<div class="config-item"><label>STUN 服务器列表</label><div class="value">' + data.StunServers.join('<br>') + '</div></div>';
-                    }
-
-                    if (data.Port !== undefined) {
-                        html += '<div class="config-item"><label>端口</label><div class="value">' + data.Port + '</div></div>';
-                    }
-
-                    if (data.Interface !== undefined) {
-                        html += '<div class="config-item"><label>网络接口</label><div class="value">' + data.Interface + '</div></div>';
-                    }
-
-                    // 显示所有其他字段
-                    for (let key in data) {
-                        if (key !== 'StunServers' && key !== 'Port' && key !== 'Interface') {
-                            html += '<div class="config-item"><label>' + key + '</label><div class="value">' + JSON.stringify(data[key]) + '</div></div>';
-                        }
-                    }
-
-                    content.innerHTML = html;
-                } else {
-                    content.innerHTML = '<div class="error">错误: ' + (result.msg || '未知错误') + '</div>';
-                }
-            } catch (error) {
-                content.innerHTML = '<div class="error">请求失败: ' + error.message + '</div>';
+        function openAddress(protocol, address) {
+            if (!address) return;
+            protocol = (protocol || '').toLowerCase();
+            if (protocol === 'ssh') {
+                const parts = address.split(':');
+                const sshCmd = `ssh root@${parts[0]} -p ${parts[1] || '22'}`;
+                copyAddress(sshCmd);
+                setTimeout(() => alert(`由于是 SSH 协议，已为您复制终端连接命令：\n\n${sshCmd}\n\n请在您的终端(Terminal)中粘贴执行。`), 100);
+            } else {
+                window.open(`http://${address}`, '_blank');
             }
         }
 
-        // 页面加载时自动获取配置
-        loadConfig();
+        // ================= 2. 数据请求与渲染 =================
+        async function fetchConfig() {
+            try {
+                const response = await fetch('/api/stun/config');
+                if (!response.ok) throw new Error(`HTTP 请求错误，状态码: ${response.status}`);
+                const result = await response.json();
+                if (result.code === 0 && result.data) return result.data;
+                throw new Error(result.msg || "接口返回了未知的错误状态");
+            } catch (err) {
+                // 如果后端不在线，这里造个你提供的假数据用于前端测试预览
+                // 实际使用时将这部分假数据移除即可
+                console.warn("请求失败，为了预览效果，使用模拟数据: ", err.message);
+                document.getElementById('dashboard').innerHTML = `
+                    <div class="status-message error">
+                        <h3>❌ 数据加载失败</h3>
+                        <p style="margin-top: 8px; font-size: 14px;">${err.message}</p>
+                    </div>`;
+                return null;
+            }
+        }
+
+        // 渲染网络拓扑结构
+        function renderTopology(data) {
+            let html = `<div class="topo-node local">💻 本机 IP<span>${data.localIP || '--'}</span></div>`;
+
+            if (data.natRouterList && data.natRouterList.length > 0) {
+                // 确保按照 natLevel 排序 (从本机向外)
+                const sortedList = [...data.natRouterList].sort((a, b) => a.natLevel - b.natLevel);
+                sortedList.forEach(router => {
+                    html += `<div class="topo-arrow">➔</div>`;
+                    html += `<div class="topo-node router">🛜 路由 NAT ${router.natLevel}<span>${router.lanIP}</span></div>`;
+                });
+            }
+
+            html += `<div class="topo-arrow">➔</div>`;
+            html += `<div class="topo-node internet">🌐 公网 IP<span>${data.publicIP || '--'}</span></div>`;
+
+            return html;
+        }
+
+        // 渲染右侧服务大卡片
+        window.renderServices = function (index) {
+            // 更新左侧高亮
+            document.querySelectorAll('.device-item').forEach((el, idx) => {
+                if (idx === index) el.classList.add('active');
+                else el.classList.remove('active');
+            });
+
+            const device = globalData.devices[index];
+            const container = document.getElementById('services-grid-container');
+
+            if (!device || !device.services || device.services.length === 0) {
+                container.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: var(--text-desc); padding: 40px; background: var(--bg-module); border-radius: var(--radius-md);">该设备暂无服务配置</div>';
+                return;
+            }
+
+            const publicIP = globalData.publicIP || '';
+
+            container.innerHTML = device.services.map(srv => {
+                const isPunchSuccess = srv.punchSuccess === true;
+                const statusDot = isPunchSuccess ? 'status-on' : 'status-off';
+                const statusText = isPunchSuccess
+                    ? '<span style="color:var(--success); font-weight:600;">✅ 穿透成功</span>'
+                    : '<span style="color:var(--danger); font-weight:600;">❌ 待分配 / 失败</span>';
+
+                const protocol = (srv.protocol || 'TCP').toUpperCase();
+                const upnpTag = srv.useUpnp ? `<span class="svc-badge" style="background:#fef08a;color:#854d0e;">UPnP</span>` : '';
+
+                let extAddrHtml = '<div class="ext-addr empty">尚未获取外部地址</div>';
+                let actionBtns = `
+                    <button class="btn-action" disabled>📋 复制地址</button>
+                    <button class="btn-action direct" disabled>🚀 一键直达</button>
+                `;
+
+                if (srv.externalPort > 0 && publicIP) {
+                    const fullAddr = `${publicIP}:${srv.externalPort}`;
+                    extAddrHtml = `
+                        <div style="font-size:12px; color:var(--text-desc); margin-top:8px;">外部连接地址</div>
+                        <div class="ext-addr">${fullAddr}</div>
+                    `;
+                    actionBtns = `
+                        <button class="btn-action" onclick="copyAddress('${fullAddr}')">📋 复制地址</button>
+                        <button class="btn-action direct" onclick="openAddress('${srv.protocol}', '${fullAddr}')">🚀 一键直达</button>
+                    `;
+                }
+
+                const errorHtml = srv.lastError ? `
+                    <div style="background:#fef2f2; border:1px solid #fca5a5; padding:8px; border-radius:6px; color:#ef4444; font-size:12px; margin-top:8px; margin-bottom:8px;">
+                        ⚠️ <strong>错误:</strong> ${srv.lastError}
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="service-card">
+                        <div class="card-header">
+                            <i class="status-dot ${statusDot}"></i>
+                            <span class="card-title">📦 ${srv.name || '未命名服务'}</span>
+                        </div>
+                        
+                        <div class="info-line">
+                            <span class="label">协议类型</span>
+                            <span class="value" style="display:flex;gap:6px;"><span class="svc-badge">${protocol}</span> ${upnpTag}</span>
+                        </div>
+                        <div class="info-line">
+                            <span class="label">内部端口</span>
+                            <span class="value">${srv.internalPort}</span>
+                        </div>
+                        <div class="info-line">
+                            <span class="label">穿透状态</span>
+                            <span class="value">${statusText}</span>
+                        </div>
+                        
+                        ${errorHtml}
+                        ${extAddrHtml}
+
+                        <div class="svc-actions">
+                            ${actionBtns}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function initDashboard() {
+            const dashboard = document.getElementById('dashboard');
+            dashboard.innerHTML = '<div class="status-message loading">正在请求数据，请稍候...</div>';
+
+            globalData = await fetchConfig();
+            if (!globalData) return;
+
+            // 1. 顶部：网络参数与拓扑图卡片
+            const networkCard = `
+                <div class="module-card">
+                    <div class="info-line" style="margin-bottom:16px; border-bottom:1px solid var(--border-color); padding-bottom:12px;">
+                        <span style="font-size:16px; font-weight:600;">🌐 基础网络与路由拓扑</span>
+                        <span style="font-size:13px; color:var(--primary); font-family:monospace;">最优 STUN: ${globalData.bestStun || '--'}</span>
+                    </div>
+                    
+                    <div style="font-size:14px; font-weight:500; color:var(--text-desc); margin-bottom: 8px;">网络映射路径分析 (NAT Topology)</div>
+                    <div class="topology-container">
+                        ${renderTopology(globalData)}
+                    </div>
+                </div>
+            `;
+
+            // 2. 左侧：设备列表
+            let devicesHtml = '<div style="color:#999; text-align:center; padding:20px;">暂无设备接入</div>';
+            if (globalData.devices && globalData.devices.length > 0) {
+                devicesHtml = globalData.devices.map((dev, index) => `
+                    <div class="device-item" onclick="renderServices(${index})">
+                        <div class="device-item-name">💻 ${dev.name || '未知设备'}</div>
+                        <div class="device-item-ip">${dev.ip || '--'}</div>
+                    </div>
+                `).join('');
+            }
+
+            // 拼装整个面板
+            dashboard.innerHTML = `
+                <div>${networkCard}</div>
+                
+                <div style="margin-top: 8px;">
+                    <div class="section-title">设备管理与服务状态</div>
+                    <div class="device-layout">
+                        <div class="device-list-container">
+                            <div style="font-size: 13px; color: var(--text-desc); padding: 4px 8px 8px 8px; border-bottom: 1px dashed var(--border-color); margin-bottom: 8px;">设备列表</div>
+                            ${devicesHtml}
+                        </div>
+                        
+                        <div>
+                            <div class="services-grid" id="services-grid-container">
+                                </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 默认选中第一个设备并渲染其服务
+            if (globalData.devices && globalData.devices.length > 0) {
+                renderServices(0);
+            }
+        }
+
+        // 页面加载完毕自动执行
+        window.onload = initDashboard;
     </script>
 </body>
 
