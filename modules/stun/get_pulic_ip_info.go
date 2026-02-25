@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"linkstar/global"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/pion/stun"
@@ -38,21 +39,40 @@ func GetPublicIPInfo() (*PublicIPInfo, error) {
 
 // 获取本机ip
 func GetLocalIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
+	interfaces, err := net.Interfaces()
 	if err != nil {
 		return "", err
 	}
 
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() { // 转换为IPNet类型，同时去除回环地址
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
-			}
+	for _, iface := range interfaces {
+		// 过滤掉未启动的网卡
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		// 过滤虚拟网卡
+		name := iface.Name
+		if strings.HasPrefix(name, "docker") ||
+			strings.HasPrefix(name, "br-") ||
+			strings.HasPrefix(name, "veth") ||
+			strings.HasPrefix(name, "lo") ||
+			strings.HasPrefix(name, "virbr") {
+			continue
+		}
 
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() { //转换为IPNet类型，同时去除回环地址
+				if ipnet.IP.To4() != nil {
+					return ipnet.IP.String(), nil
+				}
+			}
 		}
 	}
 	return "", fmt.Errorf("未找到本机IP地址")
-
 }
 
 // 获取公网ip

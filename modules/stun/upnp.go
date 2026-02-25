@@ -64,7 +64,7 @@ func AddPortMapping(externalPort, internalPort uint16, protocol, description str
 	clients2, _, err := internetgateway2.NewWANPPPConnection1Clients()
 	if err == nil && len(clients2) > 0 {
 		logrus.Infof("使用 Internet Gateway Device v2")
-		for _, client := range clients1 {
+		for _, client := range clients2 {
 			err = client.AddPortMapping(
 				"",                        // NewRemoteHost: 空字符串表示接受来自任意IP的连接
 				externalPort,              // NewExternalPort: 外网端口号
