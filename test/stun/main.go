@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ func main() {
 	fmt.Println("╚══════════════════════════════════════════════════════════╝\n")
 
 	var err error
-	localIP, err = getLocalIP()
+	localIP, err = GetLocalIP()
 	if err != nil {
 		log.Fatalf("❌ 获取本机IP失败: %v\n", err)
 	}
@@ -784,16 +785,37 @@ func displayResult() {
 // ========== 辅助函数 ==========
 
 // 获取本机内网IP
-func getLocalIP() (string, error) {
-	addrs, err := net.InterfaceAddrs()
+func GetLocalIP() (string, error) {
+	interfaces, err := net.Interfaces()
 	if err != nil {
 		return "", err
 	}
 
-	for _, addr := range addrs {
-		if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String(), nil
+	for _, iface := range interfaces {
+		// 过滤掉未启动的网卡
+		if iface.Flags&net.FlagUp == 0 {
+			continue
+		}
+		// 过滤虚拟网卡
+		name := iface.Name
+		if strings.HasPrefix(name, "docker") ||
+			strings.HasPrefix(name, "br-") ||
+			strings.HasPrefix(name, "veth") ||
+			strings.HasPrefix(name, "lo") ||
+			strings.HasPrefix(name, "virbr") {
+			continue
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() { //转换为IPNet类型，同时去除回环地址
+				if ipnet.IP.To4() != nil {
+					return ipnet.IP.String(), nil
+				}
 			}
 		}
 	}

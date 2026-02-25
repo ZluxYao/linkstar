@@ -437,6 +437,7 @@ func serviceHealthCheck(service *model.Service, publicURL string, publicIP strin
 	default:
 		// tcp/udp 等其他协议使用 TCP 连通性检查
 		return tcpConnectCheck(publicIP, publicPort, 3*time.Second)
+		// return httpCheckOK(publicURL, 3*time.Second)
 	}
 }
 
@@ -449,7 +450,7 @@ func tcpConnectCheck(host string, port int, timeout time.Duration) bool {
 		return false
 	}
 	conn.Close()
-	logrus.Debugf("TCP连接检查 OK %s", addr)
+	logrus.Debugf("1TCP连接检查 OK %s", addr)
 	return true
 }
 
@@ -459,7 +460,7 @@ func tcpStunHealthCheck(stunConn net.Conn, publicURL string, publicIP string, ex
 	defer healthTicker.Stop()
 
 	// 首次保活：等待 NAT 映射稳定后再检查
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	if !serviceHealthCheck(service, publicURL, publicIP, expectedPublicPort) {
 		return fmt.Errorf("首次保活失败，重启")
 	}
