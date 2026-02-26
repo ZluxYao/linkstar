@@ -45,4 +45,18 @@ func StunRouters(g *gin.RouterGroup) {
 		app.StunServiceDeleteView,
 	)
 
+	// 删除设备
+	g.DELETE(
+		"stun/device/delete",
+		middleware.BindJsonMiddleware[stun_api.StunDeviceDeleteViewRequest],
+		app.StunDeviceDeleteView,
+	)
+
+	// 修改设备
+	g.PUT(
+		"stun/device/update",
+		middleware.BindJsonMiddleware[stun_api.StunDeviceUpdateViewRequest],
+		app.StunDeviceUpdateView,
+	)
+
 }

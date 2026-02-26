@@ -211,6 +211,18 @@
             font-size: 15px;
         }
 
+        .device-item-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .device-item:hover .device-item-actions {
+            opacity: 1;
+        }
+
         .device-item-ip {
             font-size: 12px;
             color: var(--text-desc);
@@ -532,7 +544,7 @@
 
     <header>
         <h2>STUN 节点管理面板</h2>
-        <button class="btn-main" onclick="initDashboard()">🔄 刷新数据</button>
+        <button class="btn-main" onclick="refreshData()">🔄 刷新数据</button>
     </header>
 
     <main id="dashboard">
@@ -544,7 +556,7 @@
     <!-- 添加设备模态框 -->
     <div class="modal-overlay" id="deviceModal">
         <div class="modal">
-            <div class="modal-title">🖥️ 添加设备</div>
+            <div class="modal-title" id="deviceModalTitle">🖥️ 添加设备</div>
             <div class="form-group">
                 <label>设备名称 *</label>
                 <input type="text" id="d-name" placeholder="如 群晖NAS / 树莓派">
@@ -555,7 +567,7 @@
             </div>
             <div class="modal-actions">
                 <button class="btn-cancel" onclick="closeDeviceModal()">取消</button>
-                <button class="btn-submit" id="deviceSubmitBtn" onclick="submitDeviceForm()">添加</button>
+                <button class="btn-submit" id="deviceSubmitBtn" onclick="submitDeviceForm()">确认</button>
             </div>
         </div>
     </div>
@@ -615,14 +627,33 @@
     <script>
         // 全局状态管理
         let globalData = null;
+        let selectedDeviceIndex = 0; // 当前选中的设备索引
         let modalMode = 'add';       // 'add' | 'edit'
         let modalDeviceIndex = -1;   // 当前操作的设备索引
         let modalServiceId = null;   // 编辑时的服务ID
+        let deviceModalMode = 'add'; // 'add' | 'edit'
+        let deviceModalId = null;    // 编辑时的设备ID
 
-        // ================= 添加设备 =================
+        // ================= 添加/编辑设备 =================
         function openDeviceModal() {
+            deviceModalMode = 'add';
+            deviceModalId = null;
+            document.getElementById('deviceModalTitle').textContent = '🖥️ 添加设备';
+            document.getElementById('deviceSubmitBtn').textContent = '添加';
             document.getElementById('d-name').value = '';
             document.getElementById('d-ip').value = '';
+            document.getElementById('deviceModal').classList.add('active');
+        }
+
+        function openEditDeviceModal(deviceIndex) {
+            const dev = globalData.devices[deviceIndex];
+            if (!dev) return;
+            deviceModalMode = 'edit';
+            deviceModalId = dev.DeviceID || dev.deviceId || dev.id;
+            document.getElementById('deviceModalTitle').textContent = '✏️ 编辑设备';
+            document.getElementById('deviceSubmitBtn').textContent = '保存';
+            document.getElementById('d-name').value = dev.name || '';
+            document.getElementById('d-ip').value = dev.ip || '';
             document.getElementById('deviceModal').classList.add('active');
         }
 
@@ -638,23 +669,58 @@
             const btn = document.getElementById('deviceSubmitBtn');
             btn.disabled = true;
             try {
-                const resp = await fetch('/api/stun/device/add', {
-                    method: 'POST',
+                let url, method, body;
+                if (deviceModalMode === 'add') {
+                    url = '/api/stun/device/add';
+                    method = 'POST';
+                    body = { name, ip };
+                } else {
+                    url = '/api/stun/device/update';
+                    method = 'PUT';
+                    body = { deviceId: deviceModalId, name, ip };
+                }
+                const resp = await fetch(url, {
+                    method,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, ip }),
+                    body: JSON.stringify(body),
                 });
                 const result = await resp.json();
                 if (result.code === 0) {
-                    showToast('设备添加成功');
+                    showToast(deviceModalMode === 'add' ? '设备添加成功' : '设备保存成功');
                     closeDeviceModal();
                     await initDashboard();
                 } else {
-                    showToast('添加失败: ' + (result.msg || '未知错误'));
+                    showToast('操作失败: ' + (result.msg || '未知错误'));
                 }
             } catch (e) {
                 showToast('请求失败: ' + e.message);
             } finally {
                 btn.disabled = false;
+            }
+        }
+
+        // ================= 删除设备 =================
+        async function deleteDevice(deviceIndex) {
+            const dev = globalData.devices[deviceIndex];
+            if (!dev) return;
+            if (!confirm(`确认删除设备「${dev.name}」？该设备下所有服务也将被删除，此操作不可撤销。`)) return;
+
+            const deviceId = dev.DeviceID || dev.deviceId || dev.id;
+            try {
+                const resp = await fetch('/api/stun/device/delete', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ deviceId }),
+                });
+                const result = await resp.json();
+                if (result.code === 0) {
+                    showToast('设备删除成功');
+                    await initDashboard();
+                } else {
+                    showToast('删除失败: ' + (result.msg || '未知错误'));
+                }
+            } catch (e) {
+                showToast('请求失败: ' + e.message);
             }
         }
 
@@ -869,6 +935,7 @@
 
         // 渲染右侧服务大卡片
         window.renderServices = function (index) {
+            selectedDeviceIndex = index;
             // 更新左侧高亮
             document.querySelectorAll('.device-item').forEach((el, idx) => {
                 if (idx === index) el.classList.add('active');
@@ -960,6 +1027,11 @@
             const dashboard = document.getElementById('dashboard');
             dashboard.innerHTML = '<div class="status-message loading">正在请求数据，请稍候...</div>';
 
+            // 记住当前选中的设备ID，刷新后恢复
+            const prevDeviceId = globalData && globalData.devices && globalData.devices[selectedDeviceIndex]
+                ? (globalData.devices[selectedDeviceIndex].DeviceID || globalData.devices[selectedDeviceIndex].deviceId)
+                : null;
+
             globalData = await fetchConfig();
             if (!globalData) return;
 
@@ -985,6 +1057,10 @@
                     <div class="device-item" onclick="renderServices(${index})">
                         <div class="device-item-name">💻 ${dev.name || '未知设备'}</div>
                         <div class="device-item-ip">${dev.ip || '--'}</div>
+                        <div class="device-item-actions" onclick="event.stopPropagation()">
+                            <button class="btn-action edit" style="flex:1;padding:3px 8px;font-size:12px;" onclick="openEditDeviceModal(${index})">✏️ 编辑</button>
+                            <button class="btn-action danger" style="flex:1;padding:3px 8px;font-size:12px;" onclick="deleteDevice(${index})">🗑️ 删除</button>
+                        </div>
                     </div>
                 `).join('');
             }
@@ -1001,7 +1077,7 @@
                                 <span>设备列表</span>
                                 <button class="btn-main" style="font-size:12px;padding:4px 10px;" onclick="openDeviceModal()">➕ 添加设备</button>
                             </div>
-                            ${devicesHtml}
+                            <div id="devices-list-inner">${devicesHtml}</div>
                         </div>
 
                         <div>
@@ -1014,14 +1090,61 @@
                 </div>
             `;
 
-            // 默认选中第一个设备并渲染其服务
+            // 刷新后恢复之前选中的设备，找不到则默认第一个
             if (globalData.devices && globalData.devices.length > 0) {
-                renderServices(0);
+                let restoreIndex = 0;
+                if (prevDeviceId !== null) {
+                    const found = globalData.devices.findIndex(d =>
+                        (d.DeviceID || d.deviceId) === prevDeviceId
+                    );
+                    if (found !== -1) restoreIndex = found;
+                }
+                modalDeviceIndex = restoreIndex;
+                renderServices(restoreIndex);
             }
         }
 
-        // 页面加载完毕自动执行
-        window.onload = initDashboard;
+        // 静默刷新：不重建页面，只更新数据和当前视图
+        async function refreshData() {
+            const prevDeviceId = globalData && globalData.devices && globalData.devices[selectedDeviceIndex]
+                ? (globalData.devices[selectedDeviceIndex].DeviceID || globalData.devices[selectedDeviceIndex].deviceId)
+                : null;
+
+            const newData = await fetchConfig();
+            if (!newData) return;
+            globalData = newData;
+
+            if (globalData.devices && globalData.devices.length > 0) {
+                let restoreIndex = 0;
+                if (prevDeviceId !== null) {
+                    const found = globalData.devices.findIndex(d =>
+                        (d.DeviceID || d.deviceId) === prevDeviceId
+                    );
+                    if (found !== -1) restoreIndex = found;
+                }
+                // 只重新渲染左侧设备列表和右侧服务卡片，不重建整个页面
+                const devicesListEl = document.getElementById('devices-list-inner');
+                if (devicesListEl) {
+                    devicesListEl.innerHTML = globalData.devices.map((dev, index) => `
+                        <div class="device-item" onclick="renderServices(${index})">
+                            <div class="device-item-name">💻 ${dev.name || '未知设备'}</div>
+                            <div class="device-item-ip">${dev.ip || '--'}</div>
+                            <div class="device-item-actions" onclick="event.stopPropagation()">
+                                <button class="btn-action edit" style="flex:1;padding:3px 8px;font-size:12px;" onclick="openEditDeviceModal(${index})">✏️ 编辑</button>
+                                <button class="btn-action danger" style="flex:1;padding:3px 8px;font-size:12px;" onclick="deleteDevice(${index})">🗑️ 删除</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                renderServices(restoreIndex);
+            }
+        }
+
+        // 页面加载完毕自动执行，并启动 1s 轮询
+        window.onload = () => {
+            initDashboard();
+            setInterval(refreshData, 1000);
+        };
     </script>
 </body>
 
