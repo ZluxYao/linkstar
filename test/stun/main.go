@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/huin/goupnp/dcps/internetgateway1"
+	"github.com/huin/goupnp/dcps/internetgateway2"
 	"github.com/libp2p/go-reuseport"
 	"github.com/pion/stun"
 )
@@ -35,10 +36,17 @@ var (
 	stunLocalPort  int                                  // STUN使用的本地端口
 	bestSTUN       string                               // 最快的STUN服务器
 	stunConn       net.Conn                             // STUN连接
-	upnpClients    []*internetgateway1.WANIPConnection1 // UPnP客户端
+	upnpClients    []upnpGateway // UPnP客户端
 	isDoubleNAT    bool                                 // 是否双层NAT
 	natType        string                               // NAT类型
 )
+
+// upnpGateway 统一抽象四种 UPnP 客户端类型
+type upnpGateway interface {
+	AddPortMapping(NewRemoteHost string, NewExternalPort uint16, NewProtocol string, NewInternalPort uint16, NewInternalClient string, NewEnabled bool, NewPortMappingDescription string, NewLeaseDuration uint32) error
+	DeletePortMapping(NewRemoteHost string, NewExternalPort uint16, NewProtocol string) error
+	GetExternalIPAddress() (NewExternalIPAddress string, err error)
+}
 
 func main() {
 	fmt.Println("╔══════════════════════════════════════════════════════════╗")
@@ -543,20 +551,40 @@ func detectNATType() {
 func setupRouterMapping() {
 	fmt.Println("🔍 正在发现 UPnP 网关设备...")
 
-	clients, _, err := internetgateway1.NewWANIPConnection1Clients()
-	if err != nil || len(clients) == 0 {
-		log.Printf("❌ UPnP 发现失败: %v\n", err)
+	upnpClients = nil
+
+	if c, _, err := internetgateway1.NewWANIPConnection1Clients(); err == nil {
+		for _, v := range c {
+			upnpClients = append(upnpClients, v)
+		}
+	}
+	if c, _, err := internetgateway1.NewWANPPPConnection1Clients(); err == nil {
+		for _, v := range c {
+			upnpClients = append(upnpClients, v)
+		}
+	}
+	if c, _, err := internetgateway2.NewWANIPConnection1Clients(); err == nil {
+		for _, v := range c {
+			upnpClients = append(upnpClients, v)
+		}
+	}
+	if c, _, err := internetgateway2.NewWANPPPConnection1Clients(); err == nil {
+		for _, v := range c {
+			upnpClients = append(upnpClients, v)
+		}
+	}
+
+	if len(upnpClients) == 0 {
+		log.Println("❌ UPnP 发现失败: 未找到任何网关设备")
 		log.Println("💡 请手动在路由器配置端口转发:")
 		log.Printf("   外部端口: %d → 内网IP: %s 内网端口: %d\n",
 			stunLocalPort, localIP, stunLocalPort)
 		return
 	}
-
-	upnpClients = clients
-	fmt.Printf("✅ 发现 %d 个 UPnP 网关设备\n", len(clients))
+	fmt.Printf("✅ 发现 %d 个 UPnP 网关设备\n", len(upnpClients))
 
 	// 获取路由器外部IP
-	externalIP, err := clients[0].GetExternalIPAddress()
+	externalIP, err := upnpClients[0].GetExternalIPAddress()
 	if err != nil {
 		log.Printf("❌ 获取路由器外部IP失败: %v\n", err)
 		return

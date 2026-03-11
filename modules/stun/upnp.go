@@ -61,7 +61,7 @@ func AddPortMapping(externalPort, internalPort uint16, protocol, description str
 		}
 	}
 
-	clients2, _, err := internetgateway2.NewWANPPPConnection1Clients()
+	clients2, _, err := internetgateway2.NewWANIPConnection1Clients()
 	if err == nil && len(clients2) > 0 {
 		logrus.Infof("使用 Internet Gateway Device v2")
 		for _, client := range clients2 {
@@ -87,7 +87,7 @@ func AddPortMapping(externalPort, internalPort uint16, protocol, description str
 	clients2ppp, _, err := internetgateway2.NewWANPPPConnection1Clients()
 	if err == nil && len(clients2ppp) > 0 {
 		logrus.Infof("使用 Internet Gateway Device v2 (PPP)")
-		for _, client := range clients1ppp {
+		for _, client := range clients2ppp {
 			err = client.AddPortMapping(
 				"",
 				externalPort,

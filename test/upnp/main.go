@@ -169,7 +169,7 @@ func deletePortMapping(externalPort uint16, protocol string) error {
 func main() {
 	// 添加 TCP 333 端口映射
 	fmt.Println("========== 添加 TCP 端口映射 ==========")
-	err := addPortMapping(3339, 3339, "TCP", "Custom Port 333 TCP")
+	err := addPortMapping(3333, 3333, "TCP", "Custom Port 333 TCP")
 	if err != nil {
 		log.Printf("添加 TCP 端口映射失败: %v\n", err)
 	}
@@ -178,7 +178,7 @@ func main() {
 
 	// 添加 UDP 333 端口映射
 	fmt.Println("\n========== 添加 UDP 端口映射 ==========")
-	err = addPortMapping(3339, 3339, "UDP", "Custom Port 333 UDP")
+	err = addPortMapping(3333, 3333, "UDP", "Custom Port 333 UDP")
 	if err != nil {
 		log.Printf("添加 UDP 端口映射失败: %v\n", err)
 	}

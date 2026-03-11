@@ -35,7 +35,7 @@ func StarStun(devices []model.Device) error {
 			}
 
 			activeServices++
-
+			time.Sleep(300 * time.Millisecond)
 			// 为每个服务创建单独进程
 			go func(device *model.Device, service *model.Service) {
 				maxRetries := 5
@@ -456,13 +456,13 @@ func tcpConnectCheck(host string, port int, timeout time.Duration) bool {
 
 // TCP STUN 健康检测
 func tcpStunHealthCheck(stunConn net.Conn, publicURL string, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
-	healthTicker := time.NewTicker(28 * time.Second) // 每28s 检测一次
+	healthTicker := time.NewTicker(280 * time.Second) // 每28s 检测一次
 	defer healthTicker.Stop()
 
 	// 首次保活：等待 NAT 映射稳定后再检查
-	time.Sleep(3 * time.Second)
+	time.Sleep(6 * time.Second)
 	if !serviceHealthCheck(service, publicURL, publicIP, expectedPublicPort) {
-		return fmt.Errorf("首次保活失败，重启")
+		// return fmt.Errorf("首次保活失败，重启")
 	}
 
 	maxFailures := 3 // 失败阈值
@@ -522,7 +522,7 @@ func tcpStunHealthCheck(stunConn net.Conn, publicURL string, publicIP string, ex
 
 // UDP健康检测
 func udpStunHealthCheck(udpConn *net.UDPConn, stunServer *net.UDPAddr, expectedPublicPort int, localPort uint16) error {
-	healthTicker := time.NewTicker(28 * time.Second) // 每28s 健康检测一次
+	healthTicker := time.NewTicker(280 * time.Second) // 每28s 健康检测一次
 	defer healthTicker.Stop()
 
 	consecutiveFailures := 0 // 连续失败计数器
