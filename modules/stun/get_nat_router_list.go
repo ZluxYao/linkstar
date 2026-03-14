@@ -20,6 +20,9 @@ var (
 	_, private192, _ = net.ParseCIDR("192.168.0.0/16")
 	_, cgnRange, _   = net.ParseCIDR("100.64.0.0/10")
 	ipRegex          = regexp.MustCompile(`\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b`)
+
+	//tracepath 行首的跳数编号
+	tracepathHopRegex = regexp.MustCompile(`^\s*(\d+)\??:`)
 )
 
 // IP类型常量
@@ -76,6 +79,21 @@ func scanNATChain(target string) ([]model.NatRouterInfo, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		lastHopNum := -1 // 记录上一次处理的跳数编号，用于 tracepath 去重
+
+		// tracepath 去重：同一跳编号只取第一次
+		if runtime.GOOS == "linux" {
+			m := tracepathHopRegex.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			hopNum := 0
+			fmt.Sscanf(m[1], "%d", &hopNum)
+			if hopNum == lastHopNum {
+				continue // 同一跳的重复行，跳过
+			}
+			lastHopNum = hopNum
+		}
 
 		// 提取ip
 		ips := ipRegex.FindAllString(line, -1)
@@ -120,7 +138,7 @@ func buildTracerouteCmd(target string) *exec.Cmd {
 		// -d 不解析主机名, -h 10 最大跳数, -w 300 超时300ms
 		return exec.Command("tracert", "-d", "-h", "10", "-w", "300", target)
 	case "linux":
-		return exec.Command("tracepath", "-n", "-m", "10", target)
+		return exec.Command("tracepath", "-n", "-m", "8", target)
 
 	default: //mac
 		// -n 不解析主机名, -m 10 最大跳数, -w 1 超时1秒, -q 1 每跳只测一次
