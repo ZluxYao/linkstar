@@ -72,23 +72,20 @@ func InitSTUN() error {
 		return nil
 	})
 
-	// 2. 获取公网IP信息
-	g.Go(func() error {
-		publicIPInfo, err := GetPublicIPInfo()
-		if err != nil {
-			logrus.Errorf("获取网络信息失败:%v", err)
-			return err
-		}
-		global.StunConfig.PublicIP = publicIPInfo.PublicIP
-		global.StunConfig.LocalIP = publicIPInfo.LocalIP
-		return nil
-	})
-
 	// 等待所有任务完成
 	if err := g.Wait(); err != nil {
 		logrus.Errorf("初始化STUN配置失败: %v", err)
 		return err
 	}
+
+	// 2. 获取公网IP信息  得先获取最快的stun服务器
+	publicIPInfo, err := GetPublicIPInfo()
+	if err != nil {
+		logrus.Errorf("获取网络信息失败:%v", err)
+		return err
+	}
+	global.StunConfig.PublicIP = publicIPInfo.PublicIP
+	global.StunConfig.LocalIP = publicIPInfo.LocalIP
 
 	// 设置时间戳
 	now := time.Now()
