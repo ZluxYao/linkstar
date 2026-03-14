@@ -115,12 +115,18 @@ func scanNATChain(target string) ([]model.NatRouterInfo, error) {
 
 // buildTracerouteCmd 构建traceroute命令
 func buildTracerouteCmd(target string) *exec.Cmd {
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windiows":
 		// -d 不解析主机名, -h 10 最大跳数, -w 300 超时300ms
 		return exec.Command("tracert", "-d", "-h", "10", "-w", "300", target)
+	case "linux":
+		return exec.Command("tracepath", "-n", "-m", "10", target)
+
+	default: //mac
+		// -n 不解析主机名, -m 10 最大跳数, -w 1 超时1秒, -q 1 每跳只测一次
+		return exec.Command("traceroute", "-n", "-m", "10", "-w", "1", "-q", "1", target)
 	}
-	// -n 不解析主机名, -m 10 最大跳数, -w 1 超时1秒, -q 1 每跳只测一次
-	return exec.Command("traceroute", "-n", "-m", "10", "-w", "1", "-q", "1", target)
+
 }
 
 // classifyIP OP分类
