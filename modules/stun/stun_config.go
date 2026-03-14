@@ -44,6 +44,30 @@ func createStunConfig() (model.StunConfig, error) {
 	config.CreatedAt = time.Now()
 	config.UpdatedAt = time.Now()
 
+	// 初始化stun服务器
+	config.StunServerList = []string{"stun.radiojar.com:3478",
+		"stun.ringostat.com:3478",
+		"stun.irishvoip.com:3478",
+		"stun.voipgate.com:3478",
+		"stun.tula.nu:3478",
+		"stun.yesdates.com:3478",
+		"stun.telnyx.com:3478",
+		"stun.vavadating.com:3478",
+		"stun.bau-ha.us:3478",
+		"stun.bridesbay.com:3478",
+		"stun.3wayint.com:3478",
+		"stun.finsterwalder.com:3478",
+		"stun.romaaeterna.nl:3478",
+		"stun.fitauto.ru:3478",
+		"stun.antisip.com:3478",
+		"stun.heeds.eu:3478",
+		"stun.hot-chilli.net:3478",
+		"stun.eurosys.be:3478",
+		"stun.vincross.com:3478",
+		"stun.cibercloud.com.br:3478",
+		"stun.siptrunk.com:3478",
+	}
+
 	// 确保 config 目录存在
 	if err := os.MkdirAll("config", 0755); err != nil {
 		logrus.Error("创建config目录失败：", err)
@@ -75,21 +99,21 @@ func UpdateStunConfig(config model.StunConfig) error {
 	return nil
 }
 
-// SetupShutdownHook 监听退出信号，确保配置文件被保存
+// setupShutdownHook 监听退出信号，确保配置文件
 func SetupShutdownHook(saveFn func()) {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, syscall.SIGABRT, syscall.SIGALRM)
 
 	go func() {
-		sig := <-sigChan
-		logrus.Infof("收到退出信号: %v，正在保存配置...", sig)
+		sig := <-signalChan
+		logrus.Infof("收到退出信号：%v ,正在保存配置文件", sig)
 
-		// 执行保存函数
 		if saveFn != nil {
 			saveFn()
 		}
 
-		logrus.Info("配置已保存，程序退出")
+		logrus.Info("配置保存，程序退出")
 		os.Exit(0)
 	}()
+
 }

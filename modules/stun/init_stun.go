@@ -23,6 +23,7 @@ func InitSTUN() error {
 	if err != nil {
 		logrus.Fatal("读取配置文件失败", err)
 	}
+
 	// 监听退出保持配置文件
 	go SetupShutdownHook(func() {
 		err := UpdateStunConfig(global.StunConfig)
@@ -31,17 +32,16 @@ func InitSTUN() error {
 		}
 	})
 
+	// 监听协程数量
 	// go func() {
 	// 	for {
 	// 		numGoroutines := runtime.NumGoroutine()
 	// 		time.Sleep(1 * time.Second)
 	// 		logrus.Infof("当前 goroutine 数量: %d", numGoroutines)
 	// 	}
-
 	// }()
-	global.StunConfig.StunServerList = InitStunServers()
 
-	var g errgroup.Group
+	var g errgroup.Group //并发启动，减少时间
 
 	// 1. 获取最快的 STUN 服务器
 	g.Go(func() error {
@@ -61,7 +61,7 @@ func InitSTUN() error {
 		return nil
 	})
 
-	// Task B: 发现 UPnP 设备
+	// 发现 UPnP 设备
 	g.Go(func() error {
 		clients, _, err := internetgateway1.NewWANIPConnection1Clients()
 		if err == nil && len(clients) > 0 {
@@ -72,25 +72,26 @@ func InitSTUN() error {
 		return nil
 	})
 
+	// 2. 获取公网IP信息
+	g.Go(func() error {
+		publicIPInfo, err := GetPublicIPInfo()
+		if err != nil {
+			logrus.Errorf("获取网络信息失败:%v", err)
+			return err
+		}
+		global.StunConfig.PublicIP = publicIPInfo.PublicIP
+		global.StunConfig.LocalIP = publicIPInfo.LocalIP
+		return nil
+	})
+
 	// 等待所有任务完成
 	if err := g.Wait(); err != nil {
 		logrus.Errorf("初始化STUN配置失败: %v", err)
 		return err
 	}
 
-	// 2. 获取公网IP信息
-
-	publicIPInfo, err := GetPublicIPInfo()
-	if err != nil {
-		logrus.Errorf("获取网络信息失败:%v", err)
-
-	}
-	global.StunConfig.PublicIP = publicIPInfo.PublicIP
-	global.StunConfig.LocalIP = publicIPInfo.LocalIP
-
 	// 设置时间戳
 	now := time.Now()
-	global.StunConfig.CreatedAt = now
 	global.StunConfig.UpdatedAt = now
 
 	fmt.Println("最快的stun服务器", global.StunConfig.BestSTUN)

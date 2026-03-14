@@ -14,8 +14,11 @@ import (
 	"github.com/huin/goupnp/dcps/internetgateway2"
 )
 
-// 强制使用的网关 IP (iStoreOS)
+// 强制使用的网关 IP (iStoreOS) - EasyTier 虚拟网络
 const forcedGatewayIP = "10.126.126.1"
+
+// UPnP 服务端口 (iStoreOS 上是 5000，不是标准的 1900)
+const forcedGatewayPort = "5000"
 
 // getLocalIP 获取本机内网IP地址
 func getLocalIP() (string, error) {
@@ -46,8 +49,8 @@ func addPortMapping(externalPort, internalPort uint16, protocol, description str
 	fmt.Printf("尝试添加端口映射: 外部端口 %d -> 内部端口 %d (%s)\n", externalPort, internalPort, protocol)
 
 	// 先尝试通过强制网关的 UPnP
-	fmt.Printf("尝试通过强制网关 %s 发现 UPnP 设备...\n", forcedGatewayIP)
-	rootURL := "http://" + forcedGatewayIP + ":1900/rootDesc.xml"
+	fmt.Printf("尝试通过强制网关 %s:%s 发现 UPnP 设备...\n", forcedGatewayIP, forcedGatewayPort)
+	rootURL := "http://" + forcedGatewayIP + ":" + forcedGatewayPort + "/rootDesc.xml"
 
 	// 尝试通过 HTTP 获取设备描述
 	resp, err := http.Get(rootURL)
