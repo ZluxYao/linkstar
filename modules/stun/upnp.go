@@ -3,148 +3,209 @@ package stun
 import (
 	"fmt"
 	"linkstar/global"
+	"time"
 
 	"github.com/huin/goupnp/dcps/internetgateway1"
 	"github.com/huin/goupnp/dcps/internetgateway2"
 	"github.com/sirupsen/logrus"
 )
 
-// 添加UPNP端口映射
-func AddPortMapping(externalPort, internalPort uint16, protocol, description string) error {
+// upnpOp 操作类型
+type upnpOp int
 
-	logrus.Infof("尝试添加端口映射: 外部端口 %d -> 内部端口 %d (%s)", externalPort, internalPort, protocol)
+const (
+	upnpOpAdd upnpOp = iota
+	upnpOpDelete
+	upnpOpRenew // 续约，走 urgent 通道
+)
 
-	// 先尝试旧版协议
-	clients1, _, err := internetgateway1.NewWANIPConnection1Clients()
-	if err == nil && len(clients1) > 0 {
-		logrus.Infof("使用 Internet Gateway Device v1")
-		for _, client := range clients1 {
-			err = client.AddPortMapping(
-				"",                        // NewRemoteHost: 空字符串表示接受来自任意IP的连接
-				externalPort,              // NewExternalPort: 外网端口号
-				protocol,                  // NewProtocol: "TCP" 或 "UDP"
-				internalPort,              // NewInternalPort: 内网端口号
-				global.StunConfig.LocalIP, // NewInternalClient: 内网目标IP（本机IP）
-				true,                      // NewEnabled: 是否启用此映射
-				description,               // NewPortMappingDescription: 映射说明
-				uint32(0),                 // NewLeaseDuration: 租期，0表示永久有效
-			)
-			if err != nil {
-				logrus.Infof("IGDv1 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			logrus.Info("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	clients1ppp, _, err := internetgateway1.NewWANPPPConnection1Clients()
-	if err == nil && len(clients1ppp) > 0 {
-		logrus.Infof("使用 Internet Gateway Device v1 (PPP)")
-		for _, client := range clients1ppp {
-			err = client.AddPortMapping(
-				"",
-				externalPort,
-				protocol,
-				internalPort,
-				global.StunConfig.LocalIP,
-				true,
-				description,
-				uint32(0),
-			)
-			if err != nil {
-				logrus.Infof("IGDv1 PPP 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			logrus.Infof("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	clients2, _, err := internetgateway2.NewWANIPConnection1Clients()
-	if err == nil && len(clients2) > 0 {
-		logrus.Infof("使用 Internet Gateway Device v2")
-		for _, client := range clients2 {
-			err = client.AddPortMapping(
-				"",                        // NewRemoteHost: 空字符串表示接受来自任意IP的连接
-				externalPort,              // NewExternalPort: 外网端口号
-				protocol,                  // NewProtocol: "TCP" 或 "UDP"
-				internalPort,              // NewInternalPort: 内网端口号
-				global.StunConfig.LocalIP, // NewInternalClient: 内网目标IP（本机IP）
-				true,                      // NewEnabled: 是否启用此映射
-				description,               // NewPortMappingDescription: 映射说明
-				uint32(0),                 // NewLeaseDuration: 租期，0表示永久有效
-			)
-			if err != nil {
-				logrus.Infof("IGDv2 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			logrus.Info("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	clients2ppp, _, err := internetgateway2.NewWANPPPConnection1Clients()
-	if err == nil && len(clients2ppp) > 0 {
-		logrus.Infof("使用 Internet Gateway Device v2 (PPP)")
-		for _, client := range clients2ppp {
-			err = client.AddPortMapping(
-				"",
-				externalPort,
-				protocol,
-				internalPort,
-				global.StunConfig.LocalIP,
-				true,
-				description,
-				uint32(0),
-			)
-			if err != nil {
-				logrus.Infof("IGDv2 PPP 添加失败: %v，尝试下一个客户端\n", err)
-				continue
-			}
-			logrus.Infof("✓ 端口映射添加成功!")
-			return nil
-		}
-	}
-
-	// 所有方法都失败，返回错误
-	return fmt.Errorf("未找到可用的UPnP网关设备或所有尝试均失败")
+// upnpReq 一次 UPnP 操作请求
+type upnpReq struct {
+	op           upnpOp
+	externalPort uint16
+	internalPort uint16
+	protocol     string
+	description  string
+	internalIP   string
+	resultCh     chan error // buffered 1，调用方等这个
 }
 
+// upnpGateway 持有已发现的网关客户端（启动时发现一次，之后复用）
+type upnpGateway struct {
+	v1    []*internetgateway1.WANIPConnection1
+	v1ppp []*internetgateway1.WANPPPConnection1
+	v2    []*internetgateway2.WANIPConnection1
+	v2ppp []*internetgateway2.WANPPPConnection1
+}
+
+var (
+	// 全局两个优先级通道
+	// urgent: Renew 走这里，保活优先
+	// normal: Add / Delete 走这里
+	upnpUrgentCh = make(chan *upnpReq, 20)
+	upnpNormalCh = make(chan *upnpReq, 200)
+)
+
+// DiscoverUPnPGateway 启动时调用一次，发现并缓存网关
+func DiscoverUPnPGateway() *upnpGateway {
+	gw := &upnpGateway{}
+
+	if clients, _, err := internetgateway1.NewWANIPConnection1Clients(); err == nil {
+		gw.v1 = clients
+	}
+	if clients, _, err := internetgateway1.NewWANPPPConnection1Clients(); err == nil {
+		gw.v1ppp = clients
+	}
+	if clients, _, err := internetgateway2.NewWANIPConnection1Clients(); err == nil {
+		gw.v2 = clients
+	}
+	if clients, _, err := internetgateway2.NewWANPPPConnection1Clients(); err == nil {
+		gw.v2ppp = clients
+	}
+
+	if len(gw.v1)+len(gw.v1ppp)+len(gw.v2)+len(gw.v2ppp) == 0 {
+		logrus.Warn("[UPnP] 未发现任何网关设备")
+	} else {
+		logrus.Infof("[UPnP] 发现网关: v1=%d v1ppp=%d v2=%d v2ppp=%d",
+			len(gw.v1), len(gw.v1ppp), len(gw.v2), len(gw.v2ppp))
+	}
+	return gw
+}
+
+// StartUPnPWorker 启动全局唯一串行 worker，在 InitSTUN 里调用一次
+func StartUPnPWorker(gw *upnpGateway) {
+	go func() {
+		for {
+			// 优先消费 urgent，urgent 空了才取 normal
+			var req *upnpReq
+			select {
+			case req = <-upnpUrgentCh:
+			default:
+				select {
+				case req = <-upnpUrgentCh:
+				case req = <-upnpNormalCh:
+				}
+			}
+
+			var err error
+			switch req.op {
+			case upnpOpAdd, upnpOpRenew:
+				err = gw.addMapping(req)
+			case upnpOpDelete:
+				err = gw.deleteMapping(req)
+			}
+
+			// 结果写回，调用方有 select+timeout 兜底，这里不会阻塞
+			req.resultCh <- err
+
+			// 两次请求之间间隔，防止打爆网关
+			time.Sleep(150 * time.Millisecond)
+		}
+	}()
+}
+
+// sendUPnPReq 向 worker 提交请求，urgent=true 走优先通道
+// 返回 resultCh，调用方自己 select 等结果
+func sendUPnPReq(req *upnpReq, urgent bool) chan error {
+	req.resultCh = make(chan error, 1)
+	if urgent {
+		select {
+		case upnpUrgentCh <- req:
+		default:
+			// urgent 通道满了（极少），降级到 normal
+			select {
+			case upnpNormalCh <- req:
+			default:
+				// 两个都满，直接返回错误，不阻塞调用方
+				req.resultCh <- fmt.Errorf("upnp queue full")
+			}
+		}
+	} else {
+		select {
+		case upnpNormalCh <- req:
+		default:
+			req.resultCh <- fmt.Errorf("upnp queue full")
+		}
+	}
+	return req.resultCh
+}
+
+// ---- 实际执行 SOAP，复用已发现的网关 ----
+
+func (gw *upnpGateway) addMapping(req *upnpReq) error {
+	for _, c := range gw.v1 {
+		if err := c.AddPortMapping("", req.externalPort, req.protocol, req.internalPort,
+			req.internalIP, true, req.description, 0); err == nil {
+			return nil
+		}
+	}
+	for _, c := range gw.v1ppp {
+		if err := c.AddPortMapping("", req.externalPort, req.protocol, req.internalPort,
+			req.internalIP, true, req.description, 0); err == nil {
+			return nil
+		}
+	}
+	for _, c := range gw.v2 {
+		if err := c.AddPortMapping("", req.externalPort, req.protocol, req.internalPort,
+			req.internalIP, true, req.description, 0); err == nil {
+			return nil
+		}
+	}
+	for _, c := range gw.v2ppp {
+		if err := c.AddPortMapping("", req.externalPort, req.protocol, req.internalPort,
+			req.internalIP, true, req.description, 0); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("所有网关均无法添加映射 port=%d", req.externalPort)
+}
+
+func (gw *upnpGateway) deleteMapping(req *upnpReq) error {
+	for _, c := range gw.v1 {
+		if err := c.DeletePortMapping("", req.externalPort, req.protocol); err == nil {
+			return nil
+		}
+	}
+	for _, c := range gw.v2 {
+		if err := c.DeletePortMapping("", req.externalPort, req.protocol); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("删除映射失败 port=%d", req.externalPort)
+}
+
+// ── 兼容函数：供 stun.go 里的 RunStunTunnel / RunStunTunnelWithContext 调用 ──
+// 内部走全局 UPnP worker channel，保持串行
+
+// AddPortMapping 添加端口映射（兼容旧调用）
+func AddPortMapping(externalPort, internalPort uint16, protocol, description string) error {
+	rCh := sendUPnPReq(&upnpReq{
+		op:           upnpOpAdd,
+		externalPort: externalPort,
+		internalPort: internalPort,
+		protocol:     protocol,
+		description:  description,
+		internalIP:   global.StunConfig.LocalIP,
+	}, false)
+	select {
+	case err := <-rCh:
+		return err
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("AddPortMapping 超时")
+	}
+}
+
+// DeletePortMapping 删除端口映射（兼容旧调用）
 func DeletePortMapping(externalPort uint16, protocol string) error {
-	// 使用IGDv1 删除
-	clients, _, err := internetgateway1.NewWANIPConnection1Clients()
-	if err == nil && len(clients) > 0 {
-		for _, client := range clients {
-			// 删除端口只需要外网端口和协议类型
-			err = client.DeletePortMapping(
-				"",
-				externalPort,
-				protocol,
-			)
-			if err == nil {
-				logrus.Infof("✓ %d端口映射删除成功!", externalPort)
-				return nil
-			}
-		}
+	rCh := sendUPnPReq(&upnpReq{
+		op:           upnpOpDelete,
+		externalPort: externalPort,
+		protocol:     protocol,
+	}, false)
+	select {
+	case err := <-rCh:
+		return err
+	case <-time.After(10 * time.Second):
+		return fmt.Errorf("DeletePortMapping 超时")
 	}
-
-	// 使用IGDv1 删除
-	clients2, _, err := internetgateway2.NewWANIPConnection1Clients()
-	if err == nil && len(clients) > 0 {
-		for _, client := range clients2 {
-			// 删除端口只需要外网端口和协议类型
-			err = client.DeletePortMapping(
-				"",
-				externalPort,
-				protocol,
-			)
-			if err == nil {
-				logrus.Infof("✓ %d端口映射删除成功!", externalPort)
-				return nil
-			}
-		}
-	}
-
-	return fmt.Errorf("删除端口映射失败")
 }
