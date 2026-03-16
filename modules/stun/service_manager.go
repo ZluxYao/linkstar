@@ -121,3 +121,64 @@ func StartAllServices() {
 		}
 	}
 }
+
+// StartAllServicesBatched 分批启动所有服务，避免并发过高
+// 每批启动10个服务，批次之间延迟2秒
+func StartAllServicesBatched() {
+	const batchSize = 10              // 每批启动的服务数量
+	const batchDelay = 2 * time.Second // 批次之间的延迟
+
+	// 收集所有需要启动的服务
+	type serviceInfo struct {
+		device  *model.Device
+		service *model.Service
+	}
+
+	var servicesToStart []serviceInfo
+	for i := range global.StunConfig.Devices {
+		device := &global.StunConfig.Devices[i]
+		for j := range device.Services {
+			service := &device.Services[j]
+			if service.Enabled {
+				servicesToStart = append(servicesToStart, serviceInfo{
+					device:  device,
+					service: service,
+				})
+			}
+		}
+	}
+
+	totalServices := len(servicesToStart)
+	if totalServices == 0 {
+		logrus.Info("  ℹ️  没有需要启动的服务")
+		return
+	}
+
+	logrus.Infof("  ⏳ 准备启动 %d 个服务（每批 %d 个，批间延迟 %v）", totalServices, batchSize, batchDelay)
+
+	// 分批启动
+	for i := 0; i < totalServices; i += batchSize {
+		end := i + batchSize
+		if end > totalServices {
+			end = totalServices
+		}
+
+		batchNum := (i / batchSize) + 1
+		totalBatches := (totalServices + batchSize - 1) / batchSize
+		logrus.Infof("  🚀 启动第 %d/%d 批服务 (%d-%d)...", batchNum, totalBatches, i+1, end)
+
+		// 启动当前批次的服务
+		for _, info := range servicesToStart[i:end] {
+			StartService(info.device, info.service)
+			time.Sleep(100 * time.Millisecond) // 每个服务之间小延迟
+		}
+
+		// 如果不是最后一批，等待一段时间再启动下一批
+		if end < totalServices {
+			logrus.Infof("  ⏸️  等待 %v 后启动下一批...", batchDelay)
+			time.Sleep(batchDelay)
+		}
+	}
+
+	logrus.Infof("✅ 阶段3完成: 所有服务已启动 (共 %d 个)", totalServices)
+}
