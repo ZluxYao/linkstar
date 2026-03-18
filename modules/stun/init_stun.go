@@ -63,6 +63,8 @@ func InitSTUN() error {
 
 	// 发现 UPnP 设备
 	g.Go(func() error {
+		wg := DiscoverUPnPGateway()
+
 		clients, _, err := internetgateway1.NewWANIPConnection1Clients()
 		if err == nil && len(clients) > 0 {
 			upnpClients = clients

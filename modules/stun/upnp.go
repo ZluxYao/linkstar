@@ -9,6 +9,38 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type Gateway struct {
+	V1    []*internetgateway1.WANIPConnection1
+	V2    []*internetgateway2.WANIPConnection1
+	V1ppp []*internetgateway1.WANPPPConnection1
+	V2ppp []*internetgateway2.WANPPPConnection1
+}
+
+// 发现网关
+func DiscoverUPnPGateway() *Gateway {
+	gw := &Gateway{}
+
+	if clients, _, err := internetgateway1.NewWANIPConnection1Clients(); err != nil {
+		gw.V1 = clients
+	}
+
+	if clients, _, err := internetgateway2.NewWANIPConnection1Clients(); err != nil {
+		gw.V2 = clients
+	}
+
+	if clients, _, err := internetgateway1.NewWANPPPConnection1Clients(); err != nil {
+		gw.V1ppp = clients
+	}
+
+	if clients, _, err := internetgateway2.NewWANPPPConnection1Clients(); err != nil {
+		gw.V2ppp = clients
+	}
+
+	return gw
+}
+
+// 启动获取网关
+
 // 添加UPNP端口映射
 func AddPortMapping(externalPort, internalPort uint16, protocol, description string) error {
 
