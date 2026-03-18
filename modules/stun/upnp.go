@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Gateway struct {
+type UpnpGateway struct {
 	V1    []*internetgateway1.WANIPConnection1
 	V2    []*internetgateway2.WANIPConnection1
 	V1ppp []*internetgateway1.WANPPPConnection1
@@ -17,23 +17,28 @@ type Gateway struct {
 }
 
 // 发现网关
-func DiscoverUPnPGateway() *Gateway {
-	gw := &Gateway{}
+func DiscoverUPnPGateway() *UpnpGateway {
+	gw := &UpnpGateway{}
 
-	if clients, _, err := internetgateway1.NewWANIPConnection1Clients(); err != nil {
+	if clients, _, err := internetgateway1.NewWANIPConnection1Clients(); err == nil {
 		gw.V1 = clients
 	}
 
-	if clients, _, err := internetgateway2.NewWANIPConnection1Clients(); err != nil {
+	if clients, _, err := internetgateway2.NewWANIPConnection1Clients(); err == nil {
 		gw.V2 = clients
 	}
 
-	if clients, _, err := internetgateway1.NewWANPPPConnection1Clients(); err != nil {
+	if clients, _, err := internetgateway1.NewWANPPPConnection1Clients(); err == nil {
 		gw.V1ppp = clients
 	}
 
-	if clients, _, err := internetgateway2.NewWANPPPConnection1Clients(); err != nil {
+	if clients, _, err := internetgateway2.NewWANPPPConnection1Clients(); err == nil {
 		gw.V2ppp = clients
+	}
+
+	if len(gw.V1)+len(gw.V2)+len(gw.V1ppp)+len(gw.V2ppp) == 0 {
+		logrus.Warnf("未发现upnp网关")
+		return gw
 	}
 
 	return gw
