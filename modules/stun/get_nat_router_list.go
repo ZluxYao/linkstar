@@ -134,7 +134,7 @@ func scanNATChain(target string) ([]model.NatRouterInfo, error) {
 // buildTracerouteCmd 构建traceroute命令
 func buildTracerouteCmd(target string) *exec.Cmd {
 	switch runtime.GOOS {
-	case "windiows":
+	case "windows":
 		// -d 不解析主机名, -h 10 最大跳数, -w 300 超时300ms
 		return exec.Command("tracert", "-d", "-h", "10", "-w", "300", target)
 	case "linux":

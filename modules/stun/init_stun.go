@@ -65,12 +65,8 @@ func InitSTUN() error {
 	g.Go(func() error {
 		wg := DiscoverUPnPGateway()
 
-		clients, _, err := internetgateway1.NewWANIPConnection1Clients()
-		if err == nil && len(clients) > 0 {
-			upnpClients = clients
-			externalIP, _ := clients[0].GetExternalIPAddress()
-			logrus.Infof("📡 发现 UPnP 网关，外部IP: %s", externalIP)
-		}
+		SelectDefaultGateway(wg)
+
 		return nil
 	})
 
