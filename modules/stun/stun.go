@@ -251,15 +251,15 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 	}
 
 	// 4.配置路由器UPnp
-	go func() {
-		description := fmt.Sprintf("LinkStar-%s", service.Name)
-		err := AddPortMapping(localPort, localPort, "TCP", description)
-		if err != nil {
-			logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
-		} else {
-			logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
-		}
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	description := fmt.Sprintf("LinkStar-%s", service.Name)
+	err = AddPortMappingQueue(ctx, localPort, localPort, "TCP", description)
+	if err != nil {
+		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
+	} else {
+		logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
+	}
 
 	defer func() {
 		logrus.Infof("[%s]正在清理资源... ", service.Name)
