@@ -63,9 +63,13 @@ func InitSTUN() error {
 
 	// 发现 UPnP 设备
 	g.Go(func() error {
+		// 发现网关
 		wg := DiscoverUPnPGateway()
 
+		// 智能选择网关
 		SelectDefaultGateway(wg)
+
+		global.UpnpGateway = wg
 
 		return nil
 	})

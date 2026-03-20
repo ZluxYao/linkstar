@@ -5,5 +5,6 @@ import (
 )
 
 var (
-	StunConfig model.StunConfig
+	StunConfig  model.StunConfig
+	UpnpGateway *model.UpnpGateway
 )
