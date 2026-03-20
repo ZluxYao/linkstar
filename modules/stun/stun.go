@@ -89,9 +89,7 @@ func StarStun(devices []model.Device) error {
 // RunStunTunnelWithContext 支持 context 取消的穿透逻辑（供 service_manager 使用）
 func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *model.Service) error {
 	protocol := strings.ToLower(service.Protocol)
-	if protocol == "ssh" {
-		protocol = "tcp"
-	}
+
 	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
 
 	stunConn, err := reuseport.Dial(protocol, localAddr, global.StunConfig.BestSTUN)
@@ -127,15 +125,15 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		return fmt.Errorf("端口监听失败：%w", err)
 	}
 
-	go func() {
-		description := fmt.Sprintf("LinkStar-%s", service.Name)
-		err := AddPortMapping(localPort, localPort, "TCP", description)
-		if err != nil {
-			logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
-		} else {
-			logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
-		}
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	description := fmt.Sprintf("LinkStar-%s", service.Name)
+	err = AddPortMappingQueue(ctx, localPort, localPort, "TCP", description)
+	if err != nil {
+		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
+	} else {
+		logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
+	}
 
 	// ctx 取消时关闭连接，让所有阻塞调用立即返回
 	go func() {
@@ -209,10 +207,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 // 实现stun内网穿透逻辑
 func RunStunTunnel(targetIP string, service *model.Service) error {
 	protocol := strings.ToLower(service.Protocol) // 转为小写
-	// ssh 是应用层协议，底层走 tcp
-	if protocol == "ssh" {
-		protocol = "tcp"
-	}
+
 	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
 
 	// 1.STUN拨号
@@ -395,35 +390,6 @@ func doUDPStunHandshake(conn *net.UDPConn, stunServerAddr *net.UDPAddr) (string,
 	return xorAddr.IP.String(), xorAddr.Port, nil
 }
 
-// sshConnectCheck 通过读取 SSH 横幅来验证 SSH 服务可达性
-func sshConnectCheck(host string, port int, timeout time.Duration) bool {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
-	if err != nil {
-		logrus.Debugf("SSH连接检查失败 %s: %v", addr, err)
-		return false
-	}
-	defer conn.Close()
-
-	// 读取 SSH 横幅，例如 "SSH-2.0-OpenSSH_8.9"
-	buf := make([]byte, 64)
-	conn.SetReadDeadline(time.Now().Add(timeout))
-	n, err := conn.Read(buf)
-	if err != nil || n == 0 {
-		logrus.Debugf("SSH横幅读取失败 %s: %v", addr, err)
-		return false
-	}
-
-	banner := string(buf[:n])
-	if strings.HasPrefix(banner, "SSH-") {
-		logrus.Debugf("SSH检查 OK %s, 横幅: %s", addr, strings.TrimSpace(banner))
-		return true
-	}
-
-	logrus.Debugf("SSH检查 NOT OK %s, 收到: %s", addr, strings.TrimSpace(banner))
-	return false
-}
-
 // serviceHealthCheck 根据 Protocol 字段选择合适的健康检查方式
 // Protocol: "ssh" -> SSH横幅检测, "http"/"https" -> HTTP检测, "tcp"/"udp" -> TCP连通性检测
 func serviceHealthCheck(service *model.Service, publicURL string, publicIP string, publicPort int) bool {
@@ -431,7 +397,7 @@ func serviceHealthCheck(service *model.Service, publicURL string, publicIP strin
 
 	switch proto {
 	case "ssh":
-		return sshConnectCheck(publicIP, publicPort, 3*time.Second)
+		return tcpConnectCheck(publicIP, publicPort, 3*time.Second)
 	case "http", "https":
 		return httpCheckWithRetry(publicURL, 1, 3*time.Second)
 	default:
