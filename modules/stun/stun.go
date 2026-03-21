@@ -125,10 +125,10 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		return fmt.Errorf("端口监听失败：%w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
+	upnpCtx, upnpCancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer upnpCancel()
 	description := fmt.Sprintf("LinkStar-%s", service.Name)
-	err = AddPortMappingQueue(ctx, localPort, localPort, "TCP", description)
+	err = AddPortMappingQueue(upnpCtx, localPort, localPort, "TCP", description)
 	if err != nil {
 		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
 	} else {
@@ -246,10 +246,10 @@ func RunStunTunnel(targetIP string, service *model.Service) error {
 	}
 
 	// 4.配置路由器UPnp
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	upnpCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
 	description := fmt.Sprintf("LinkStar-%s", service.Name)
-	err = AddPortMappingQueue(ctx, localPort, localPort, "TCP", description)
+	err = AddPortMappingQueue(upnpCtx, localPort, localPort, "TCP", description)
 	if err != nil {
 		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
 	} else {
