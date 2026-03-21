@@ -241,6 +241,11 @@ func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort i
 	for range healthTicker.C {
 		// 策略1: 端到端服务检测+保活
 		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
+			if failureCount == 0 { // 若果是第一次失败防止网络波动，来多一次
+				if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
+					continue
+				}
+			}
 			failureCount = 0 // 成功就重置
 			continue         // 服务正常，跳过stun检查
 		}
