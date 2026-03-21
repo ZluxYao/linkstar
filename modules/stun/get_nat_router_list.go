@@ -76,10 +76,10 @@ func scanNATChain(target string) ([]model.NatRouterInfo, error) {
 	var natChain []model.NatRouterInfo
 	scanner := bufio.NewScanner(stdout)
 	level := uint(0)
+	lastHopNum := -1 // 记录上一次处理的跳数编号，用于 tracepath 去重
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		lastHopNum := -1 // 记录上一次处理的跳数编号，用于 tracepath 去重
 
 		// tracepath 去重：同一跳编号只取第一次
 		if runtime.GOOS == "linux" {
