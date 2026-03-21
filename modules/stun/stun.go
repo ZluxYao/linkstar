@@ -2,12 +2,10 @@ package stun
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"linkstar/global"
 	"linkstar/modules/stun/model"
 	"net"
-	"net/http"
 	"strings"
 	"time"
 
@@ -16,82 +14,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// 启动STUN服务 StarStun
-func StarStun(devices []model.Device) error {
-
-	errChan := make(chan error, 1)
-	activeServices := 0
-
-	// 直接用下标遍历 global.StunConfig.Devices，确保拿到的是真实指针
-	for i := range global.StunConfig.Devices {
-		for j := range global.StunConfig.Devices[i].Services {
-			device := &global.StunConfig.Devices[i]
-			service := &global.StunConfig.Devices[i].Services[j]
-
-			// 未启用
-			if !service.Enabled {
-				logrus.Infof("[%s - %s] 服务未启用，跳过", device.Name, service.Name)
-				continue
-			}
-
-			activeServices++
-			time.Sleep(300 * time.Millisecond)
-			// 为每个服务创建单独进程
-			go func(device *model.Device, service *model.Service) {
-				maxRetries := 5
-				attempt := 0
-
-				for {
-					attempt++
-					logrus.Infof("[%s - %s] 启动服务 (第 %d 次)", device.Name, service.Name, attempt)
-
-					err := RunStunTunnel(device.IP, service)
-
-					if err != nil {
-						logrus.Errorf("❌ [%s - %s] STUN 穿透失败 (第 %d/%d 次): %v", device.Name, service.Name, attempt, maxRetries, err)
-
-						// 如果之前启动成功过(进入过健康检查),则重置计数
-						if service.StartupSuccess {
-							attempt = 0
-							service.StartupSuccess = false // 重置标志
-						}
-
-						// 达到最大重试次数
-						if attempt >= maxRetries {
-							service.Enabled = false
-							logrus.Errorf("[%s - %s] 达到最大重试次数,关闭服务", device.Name, service.Name)
-							select {
-							case errChan <- fmt.Errorf("[%s - %s] 达到最大重试次数: %w", device.Name, service.Name, err):
-							default:
-							}
-							return
-						}
-
-						// 等待一段时间再重试
-						time.Sleep(time.Second * 1)
-						continue
-					}
-				}
-			}(device, service)
-		}
-	}
-
-	if activeServices == 0 {
-		return fmt.Errorf("没有启用的服务需要穿透")
-	}
-
-	logrus.Infof("✅ 已启动 %d 个服务的 STUN 穿透", activeServices)
-
-	// 阻塞等待第一个严重错误（如果所有服务都正常运行，会一直阻塞）
-	return <-errChan
-}
-
-// RunStunTunnelWithContext 支持 context 取消的穿透逻辑（供 service_manager 使用）
+// RunStunTunnelWithContext 实现内网穿透逻辑  支持 context 取消的穿透逻辑
 func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *model.Service) error {
-	protocol := strings.ToLower(service.Protocol)
+	protocol := strings.ToLower(service.Protocol) // 转为小写
 
-	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
+	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP) //端口为0任意端口
 
+	// STUN 拨号
 	stunConn, err := reuseport.Dial(protocol, localAddr, global.StunConfig.BestSTUN)
 	if err != nil {
 		return fmt.Errorf("STUN拨号失败 [%s]:%w", global.StunConfig.BestSTUN, err)
@@ -104,6 +33,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		localPort = uint16(stunConn.LocalAddr().(*net.UDPAddr).Port)
 	}
 
+	// STUN 握手
 	var publicIP string
 	var publicPort int
 	if protocol == "tcp" {
@@ -118,19 +48,22 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		return fmt.Errorf("与STUN服务器握手失败:%w", err)
 	}
 
+	// 端口复用监听
 	listenAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
-	listener, err := reuseport.Listen(protocol, listenAddr)
+	listener, err := reuseport.Listen(protocol, listenAddr) // 使用reuseport SO_REUSEPORT 可以复用端口
 	if err != nil {
 		stunConn.Close()
 		return fmt.Errorf("端口监听失败：%w", err)
 	}
 
-	upnpCtx, upnpCancel := context.WithTimeout(context.Background(), 25*time.Second)
+	// 路由器upnp映射
+	upnpCtx, upnpCancel := context.WithTimeout(ctx, 25*time.Second) //创建upnp的ctx
 	defer upnpCancel()
 	description := fmt.Sprintf("LinkStar-%s", service.Name)
 	err = AddPortMappingQueue(upnpCtx, localPort, localPort, "TCP", description)
 	if err != nil {
 		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
+		// todo 处理失败
 	} else {
 		logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
 	}
@@ -140,7 +73,6 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		<-ctx.Done()
 		logrus.Infof("[%s] ctx 取消，关闭连接", service.Name)
 		stunConn.Close()
-		listener.Close()
 	}()
 
 	defer func() {
@@ -155,6 +87,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 	errCh := make(chan error, 3)
 	logrus.Infof("%v %v %v", localPort, publicIP, publicPort)
 
+	// 存储数据
 	var publicURL string
 	if service.TLS {
 		publicURL = fmt.Sprintf("https://%s:%d", publicIP, publicPort)
@@ -165,10 +98,10 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 	service.ExternalPort = uint16(publicPort)
 	service.PunchSuccess = true
 
+	// 开启保活
 	if protocol == "tcp" {
 		go func() {
-			service.StartupSuccess = true
-			err = tcpStunHealthCheck(stunConn, publicURL, publicIP, publicPort, localPort, service)
+			err = tcpStunHealthCheck(stunConn, publicIP, publicPort, localPort, service)
 			if err != nil {
 				service.PunchSuccess = false
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
@@ -176,7 +109,6 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		}()
 	} else {
 		go func() {
-			service.StartupSuccess = true
 			udpConn := stunConn.(*net.UDPConn)
 			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
 			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
@@ -200,126 +132,12 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		}
 	}()
 
+	// 输出访问数据
 	logrus.Infof("   访问地址: %s", publicURL)
 	return <-errCh
 }
 
-// 实现stun内网穿透逻辑
-func RunStunTunnel(targetIP string, service *model.Service) error {
-	protocol := strings.ToLower(service.Protocol) // 转为小写
-
-	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
-
-	// 1.STUN拨号
-	stunConn, err := reuseport.Dial(protocol, localAddr, global.StunConfig.BestSTUN) // 使用reuseport SO_REUSEPORT 可以复用端口
-	if err != nil {
-		return fmt.Errorf("STUN拨号失败 [%s]:%w", global.StunConfig.BestSTUN, err)
-	}
-
-	var localPort uint16
-	if protocol == "tcp" {
-		localPort = uint16(stunConn.LocalAddr().(*net.TCPAddr).Port)
-	} else {
-		localPort = uint16(stunConn.LocalAddr().(*net.UDPAddr).Port)
-	}
-
-	// 2.STUN 握手
-	var publicIP string
-	var publicPort int
-	if protocol == "tcp" {
-		publicIP, publicPort, err = doTcpStunHandshake(stunConn)
-	} else {
-		udpConn := stunConn.(*net.UDPConn)
-		stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
-		publicIP, publicPort, err = doUDPStunHandshake(udpConn, stunServerAddr)
-	}
-	if err != nil {
-		return fmt.Errorf("与STUN服务器握手失败:%w", err)
-	}
-
-	// 3.端口复用监听
-	listenAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
-	listener, err := reuseport.Listen(protocol, listenAddr)
-	if err != nil {
-		stunConn.Close()
-		return fmt.Errorf("端口监听失败：%w", err)
-	}
-
-	// 4.配置路由器UPnp
-	upnpCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
-	defer cancel()
-	description := fmt.Sprintf("LinkStar-%s", service.Name)
-	err = AddPortMappingQueue(upnpCtx, localPort, localPort, "TCP", description)
-	if err != nil {
-		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
-	} else {
-		logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
-	}
-
-	defer func() {
-		logrus.Infof("[%s]正在清理资源... ", service.Name)
-		stunConn.Close()
-		listener.Close()
-		go DeletePortMapping(localPort, protocol)
-	}()
-
-	// 5. 启动健康检测
-	errCh := make(chan error, 3) // 创建错误通道
-	logrus.Infof("%v %v %v", localPort, publicIP, publicPort)
-
-	var publicURL string
-	if service.TLS {
-		publicURL = fmt.Sprintf("https://%s:%d", publicIP, publicPort)
-	} else {
-		publicURL = fmt.Sprintf("http://%s:%d", publicIP, publicPort)
-	}
-
-	// 穿透成功，直接通过指针更新 service 的公网端口和成功状态
-	service.ExternalPort = uint16(publicPort)
-	service.PunchSuccess = true
-
-	if protocol == "tcp" {
-		go func() {
-			service.StartupSuccess = true
-			err = tcpStunHealthCheck(stunConn, publicURL, publicIP, publicPort, localPort, service)
-			if err != nil {
-				service.PunchSuccess = false
-				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
-			}
-		}()
-	} else {
-		go func() {
-			service.StartupSuccess = true
-			udpConn := stunConn.(*net.UDPConn)
-			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
-			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
-			if err != nil {
-				service.PunchSuccess = false
-				errCh <- fmt.Errorf("UDP健康检查失败: %w", err)
-			}
-		}()
-	}
-
-	// 5.数据转发
-	go func() {
-		targetAddr := fmt.Sprintf("%s:%d", targetIP, service.InternalPort)
-		for {
-			clientConn, err := listener.Accept()
-			if err != nil {
-				errCh <- fmt.Errorf("监听器退出: %w", err)
-				return
-			}
-			logrus.Infof("[%s] 收到外部连接: %s", service.Name, clientConn.RemoteAddr())
-			go Forward(clientConn, targetAddr, protocol)
-		}
-	}()
-
-	logrus.Infof("   访问地址: %s", publicURL)
-
-	return <-errCh
-}
-
-// 与STUN服务器握手
+// 与STUN服务器握手TCP
 func doTcpStunHandshake(conn net.Conn) (string, int, error) {
 
 	// 发送STUN请求
@@ -354,7 +172,7 @@ func doTcpStunHandshake(conn net.Conn) (string, int, error) {
 	return xorAddr.IP.String(), xorAddr.Port, nil
 }
 
-// 与STUN服务器握手
+// 与STUN服务器握手UDP
 func doUDPStunHandshake(conn *net.UDPConn, stunServerAddr *net.UDPAddr) (string, int, error) {
 
 	// 发送STUN请求
@@ -390,55 +208,38 @@ func doUDPStunHandshake(conn *net.UDPConn, stunServerAddr *net.UDPAddr) (string,
 	return xorAddr.IP.String(), xorAddr.Port, nil
 }
 
-// serviceHealthCheck 根据 Protocol 字段选择合适的健康检查方式
-// Protocol: "ssh" -> SSH横幅检测, "http"/"https" -> HTTP检测, "tcp"/"udp" -> TCP连通性检测
-func serviceHealthCheck(service *model.Service, publicURL string, publicIP string, publicPort int) bool {
-	proto := strings.ToLower(service.Protocol)
-
-	switch proto {
-	case "ssh":
-		return tcpConnectCheck(publicIP, publicPort, 3*time.Second)
-	case "http", "https":
-		return httpCheckWithRetry(publicURL, 1, 3*time.Second)
-	default:
-		// tcp/udp 等其他协议使用 TCP 连通性检查
-		return tcpConnectCheck(publicIP, publicPort, 3*time.Second)
-		// return httpCheckOK(publicURL, 3*time.Second)
+// TCP首次健康检测保活
+func firstTcpHealthKeep(publicIP string, expectedPublicPort int) bool {
+	sleepTime := time.Second
+	for i := 0; i < 3; i++ {
+		time.Sleep(sleepTime)
+		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
+			return true
+		}
+		sleepTime = sleepTime * 2 // 休息1 2 4 7秒还不通就是死了
 	}
-}
-
-// tcpConnectCheck 通用 TCP 连通性检查
-func tcpConnectCheck(host string, port int, timeout time.Duration) bool {
-	addr := fmt.Sprintf("%s:%d", host, port)
-	conn, err := net.DialTimeout("tcp", addr, timeout)
-	if err != nil {
-		logrus.Debugf("TCP连接检查失败 %s: %v", addr, err)
-		return false
-	}
-	conn.Close()
-	logrus.Debugf("1TCP连接检查 OK %s", addr)
-	return true
+	return false
 }
 
 // TCP STUN 健康检测
-func tcpStunHealthCheck(stunConn net.Conn, publicURL string, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
-	healthTicker := time.NewTicker(280 * time.Second) // 每28s 检测一次
+func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
+	healthTicker := time.NewTicker(28 * time.Second) // 每28s 检测一次
 	defer healthTicker.Stop()
 
-	// 首次保活：等待 NAT 映射稳定后再检查
-	time.Sleep(6 * time.Second)
-	if !serviceHealthCheck(service, publicURL, publicIP, expectedPublicPort) {
-		// return fmt.Errorf("首次保活失败，重启")
+	// 首次保活与检测
+	if !firstTcpHealthKeep(publicIP, expectedPublicPort) {
+		return fmt.Errorf("[%s] 首次保活失败，重启", service.Name)
 	}
+	service.PunchSuccess = true
 
 	maxFailures := 3 // 失败阈值
 	currentStunConn := stunConn
 
-	logrus.Info("启动TCP健康检查 间隔28s")
+	logrus.Infof("[%s] 启动TCP健康检查 间隔28s", service.Name)
 
 	for range healthTicker.C {
 		// 策略1: 端到端服务检测+保活
-		if serviceHealthCheck(service, publicURL, publicIP, expectedPublicPort) {
+		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
 			continue // 服务正常，跳过stun检查
 		}
 
@@ -550,104 +351,15 @@ func udpStunHealthCheck(udpConn *net.UDPConn, stunServer *net.UDPAddr, expectedP
 
 }
 
-func httpCheckWithRetry(url string, maxRetries int, interval time.Duration) bool {
-	// 创建可复用的 Transport（移到循环外）
-	tr := &http.Transport{
-		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
-		MaxIdleConns:      10,
-		IdleConnTimeout:   30 * time.Second,
-		DisableKeepAlives: true,
-	}
-	defer tr.CloseIdleConnections() // 函数结束时清理空闲连接
-
-	client := &http.Client{
-		Timeout:   3 * time.Second,
-		Transport: tr,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	for i := 0; i < maxRetries; i++ {
-		resp, err := client.Get(url)
-
-		//无论成功失败都要关闭 Body
-		if resp != nil && resp.Body != nil {
-			resp.Body.Close()
-		}
-
-		if err != nil {
-			logrus.Debug("HTTP端到端检查 NOT OK", url)
-			time.Sleep(interval)
-			continue
-		}
-
-		logrus.Debug("HTTP端到端检查 OK", url)
-		return resp.StatusCode > 0
-	}
-
-	return false
-}
-
-// HTTP端到端检查
-func httpCheckOK(url string, timeout time.Duration) bool {
-
-	// 创建跳过证书验证的Transport
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-
-	client := http.Client{
-		Timeout:   timeout,
-		Transport: tr,
-		// 不跟随重定向 301 302说明服务通过
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
-
-	resp, err := client.Get(url)
+// tcpConnectCheck 通用 TCP 连通性检查
+func tcpConnectCheck(host string, port int, timeout time.Duration) bool {
+	addr := fmt.Sprintf("%s:%d", host, port)
+	conn, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
-		logrus.Debug("HTTP端到端检查 NOT OK", url)
+		logrus.Debugf("TCP连接检查失败 %s: %v", addr, err)
 		return false
 	}
-	defer resp.Body.Close()
-
-	logrus.Debug("HTTP端到端检查 OK", url)
-
-	return resp.StatusCode > 0 // 即使返回404也是穿透成功的
-}
-
-// 发送TCP STUN 心跳包
-func SendTCPHeartbeat(conn net.Conn) error {
-	// 使用 STUN Binding Request（不等待响应，仅用于保活）
-	msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
-
-	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	defer conn.SetWriteDeadline(time.Time{})
-
-	_, err := conn.Write(msg.Raw)
-	if err != nil {
-		return fmt.Errorf("发送心跳包失败")
-	}
-
-	logrus.Debug("TCP心跳包已发送")
-	return nil
-}
-
-// 发送UDP STUN 心跳包
-func SendUdpHeartbeat(conn *net.UDPConn, stunServer *net.UDPAddr) error {
-	// 使用 STUN Binding Request（不等待响应，仅用于保活）
-	msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
-
-	conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
-	defer conn.SetWriteDeadline(time.Time{})
-
-	_, err := conn.WriteToUDP(msg.Raw, stunServer)
-	if err != nil {
-		return fmt.Errorf("发送UDP心跳失败: %v", err)
-	}
-
-	logrus.Debug("UDP心跳包已发送")
-	return nil
+	conn.Close()
+	logrus.Debugf("TCP连接检查 OK %s", addr)
+	return true
 }

@@ -5,14 +5,8 @@ import (
 	"linkstar/global"
 	"time"
 
-	"github.com/huin/goupnp/dcps/internetgateway1"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-)
-
-var (
-	// 管理运行中的服务
-	upnpClients []*internetgateway1.WANIPConnection1
 )
 
 func InitSTUN() error {
