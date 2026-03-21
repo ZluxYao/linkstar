@@ -233,6 +233,7 @@ func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort i
 	service.PunchSuccess = true
 
 	maxFailures := 3 // 失败阈值
+	failureCount := 0
 	currentStunConn := stunConn
 
 	logrus.Infof("[%s] 启动TCP健康检查 间隔28s", service.Name)
@@ -240,8 +241,12 @@ func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort i
 	for range healthTicker.C {
 		// 策略1: 端到端服务检测+保活
 		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-			continue // 服务正常，跳过stun检查
+			failureCount = 0 // 成功就重置
+			continue         // 服务正常，跳过stun检查
 		}
+
+		failureCount++
+		logrus.Warnf("[%s] 端到端检查失败 (%d/%d)", service.Name, failureCount, maxFailures)
 
 		// 策略2: STUN 检测NAT映射
 		_, port, err := doTcpStunHandshake(currentStunConn)
@@ -273,6 +278,10 @@ func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort i
 			logrus.Infof("✅ STUN重连成功，端口保持 %d", newPort)
 			currentStunConn = newConn
 			continue
+		}
+
+		if failureCount >= maxFailures {
+			return fmt.Errorf("[%s] 连续 %d 次检查失败，重新打洞", service.Name, maxFailures)
 		}
 
 		// STUN正常但端口变化，触发重启
