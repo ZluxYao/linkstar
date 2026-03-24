@@ -210,13 +210,13 @@ func doUDPStunHandshake(conn *net.UDPConn, stunServerAddr *net.UDPAddr) (string,
 
 // TCP首次健康检测保活
 func firstTcpHealthKeep(publicIP string, expectedPublicPort int) bool {
-	sleepTime := time.Second
+	sleepTime := 2 * time.Second
 	for i := 0; i < 3; i++ {
 		time.Sleep(sleepTime)
 		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
 			return true
 		}
-		sleepTime = sleepTime * 2 // 休息1 2 4 7秒还不通就是死了
+		sleepTime = sleepTime * 2 // 休息2 4 8秒还不通就是死了
 	}
 	return false
 }

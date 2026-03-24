@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/pion/stun"
+	"github.com/sirupsen/logrus"
 )
 
 type PublicIPInfo struct {
@@ -113,4 +114,23 @@ func GetPublicIP() (string, error) {
 	}
 
 	return xorAddr.IP.String(), nil
+}
+
+// 不断更新当前公网ip
+func UpdatedPublicIP() {
+	time.Sleep(3 * time.Second)
+	for {
+		publicIp, err := GetPublicIP()
+		if err != nil {
+			logrus.Warn("获取公网ip失败:", err)
+			time.Sleep(time.Second)
+			continue
+		}
+
+		// 获取新的公网ip成功
+		if global.StunConfig.PublicIP != publicIp {
+			global.StunConfig.PublicIP = publicIp
+		}
+		time.Sleep(5 * time.Second)
+	}
 }
