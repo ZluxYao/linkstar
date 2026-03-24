@@ -138,6 +138,10 @@ func buildTracerouteCmd(target string) *exec.Cmd {
 		// -d 不解析主机名, -h 10 最大跳数, -w 300 超时300ms
 		return exec.Command("tracert", "-d", "-h", "10", "-w", "300", target)
 	case "linux":
+		// 优先用traceroute
+		if _, err := exec.LookPath("traceroute"); err == nil {
+			return exec.Command("traceroute", "-n", "-m", "10", "-w", "1", "-q", "1", target)
+		}
 		return exec.Command("tracepath", "-n", "-m", "8", target)
 
 	default: //mac
