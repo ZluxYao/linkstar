@@ -69,12 +69,15 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 	}
 
 	// ctx 取消时关闭连接，让所有阻塞调用立即返回
-	go func() {
-		<-ctx.Done()
-		logrus.Infof("[%s] ctx 取消，关闭连接", service.Name)
-		stunConn.Close()
-		listener.Close()
-	}()
+	// go func() {
+	// 	<-ctx.Done()
+	// 	logrus.Infof("[%s] ctx 取消，关闭连接", service.Name)
+	// 	stunConn.Close()
+	// 	listener.Close()
+	// }()
+	// 确保所有子 goroutine（健康检查、Accept循环）能感知到退出信号，不再泄露。
+	innerCtx, innerCancel := context.WithCancel(ctx)
+	defer innerCancel()
 
 	defer func() {
 		logrus.Infof("[%s] 正在清理资源...", service.Name)
@@ -102,7 +105,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 	// 开启保活
 	if protocol == "tcp" {
 		go func() {
-			err = tcpStunHealthCheck(ctx, stunConn, publicIP, publicPort, localPort, service)
+			err = tcpStunHealthCheck(innerCtx, stunConn, publicIP, publicPort, localPort, service)
 			if err != nil {
 				service.PunchSuccess = false
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
@@ -246,16 +249,20 @@ func tcpStunHealthCheck(ctx context.Context, stunConn net.Conn, publicIP string,
 		case <-healthTicker.C:
 			// 策略1: 端到端服务检测+保活
 			if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-				if failureCount == 0 { // 若果是第一次失败防止网络波动，来多一次
-					if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-						continue
-					}
-				}
+
 				failureCount = 0 // 成功就重置
 				continue         // 服务正常，跳过stun检查
 			}
 
 			failureCount++
+
+			if failureCount == 1 { // 若果是第一次失败防止网络波动，来多一次
+				if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
+					failureCount = 0 // 成功就重置
+					continue
+				}
+			}
+
 			logrus.Warnf("[%s] 端到端检查失败 (%d/%d)", service.Name, failureCount, maxFailures)
 
 			// 策略2: STUN 检测NAT映射
