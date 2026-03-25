@@ -73,6 +73,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		<-ctx.Done()
 		logrus.Infof("[%s] ctx 取消，关闭连接", service.Name)
 		stunConn.Close()
+		listener.Close()
 	}()
 
 	defer func() {
@@ -101,7 +102,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 	// 开启保活
 	if protocol == "tcp" {
 		go func() {
-			err = tcpStunHealthCheck(stunConn, publicIP, publicPort, localPort, service)
+			err = tcpStunHealthCheck(ctx, stunConn, publicIP, publicPort, localPort, service)
 			if err != nil {
 				service.PunchSuccess = false
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
@@ -222,7 +223,7 @@ func firstTcpHealthKeep(publicIP string, expectedPublicPort int) bool {
 }
 
 // TCP STUN 健康检测
-func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
+func tcpStunHealthCheck(ctx context.Context, stunConn net.Conn, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
 	healthTicker := time.NewTicker(28 * time.Second) // 每28s 检测一次
 	defer healthTicker.Stop()
 
@@ -238,67 +239,71 @@ func tcpStunHealthCheck(stunConn net.Conn, publicIP string, expectedPublicPort i
 
 	logrus.Infof("[%s] 启动TCP健康检查 间隔28s", service.Name)
 
-	for range healthTicker.C {
-		// 策略1: 端到端服务检测+保活
-		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-			if failureCount == 0 { // 若果是第一次失败防止网络波动，来多一次
-				if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-					continue
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-healthTicker.C:
+			// 策略1: 端到端服务检测+保活
+			if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
+				if failureCount == 0 { // 若果是第一次失败防止网络波动，来多一次
+					if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
+						continue
+					}
 				}
+				failureCount = 0 // 成功就重置
+				continue         // 服务正常，跳过stun检查
 			}
-			failureCount = 0 // 成功就重置
-			continue         // 服务正常，跳过stun检查
-		}
 
-		failureCount++
-		logrus.Warnf("[%s] 端到端检查失败 (%d/%d)", service.Name, failureCount, maxFailures)
+			failureCount++
+			logrus.Warnf("[%s] 端到端检查失败 (%d/%d)", service.Name, failureCount, maxFailures)
 
-		// 策略2: STUN 检测NAT映射
-		_, port, err := doTcpStunHandshake(currentStunConn)
-		if err != nil {
-			logrus.Infof("STUN连接断开，尝试重连...")
-
-			// 关闭旧连接
-			currentStunConn.Close()
-			// 重连STUN
-			localAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
-			newConn, err := reuseport.Dial("tcp", localAddr, global.StunConfig.BestSTUN)
+			// 策略2: STUN 检测NAT映射
+			_, port, err := doTcpStunHandshake(currentStunConn)
 			if err != nil {
-				return fmt.Errorf("STUN重连失败: %w", err)
+				logrus.Infof("STUN连接断开，尝试重连...")
+
+				// 关闭旧连接
+				currentStunConn.Close()
+				// 重连STUN
+				localAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
+				newConn, err := reuseport.Dial("tcp", localAddr, global.StunConfig.BestSTUN)
+				if err != nil {
+					return fmt.Errorf("STUN重连失败: %w", err)
+				}
+
+				// 验证新连接的端口
+				_, newPort, err := doTcpStunHandshake(newConn)
+				if err != nil {
+					newConn.Close()
+					return fmt.Errorf("重连后STUN验证失败: %w", err)
+				}
+
+				// 检查端口是否变化
+				if newPort != expectedPublicPort {
+					newConn.Close()
+					return fmt.Errorf("公网端口漂移 %d -> %d", expectedPublicPort, newPort)
+				}
+
+				logrus.Infof("✅ STUN重连成功，端口保持 %d", newPort)
+				currentStunConn = newConn
+				continue
 			}
 
-			// 验证新连接的端口
-			_, newPort, err := doTcpStunHandshake(newConn)
-			if err != nil {
-				newConn.Close()
-				return fmt.Errorf("重连后STUN验证失败: %w", err)
+			if failureCount >= maxFailures {
+				return fmt.Errorf("[%s] 连续 %d 次检查失败，重新打洞", service.Name, maxFailures)
 			}
 
-			// 检查端口是否变化
-			if newPort != expectedPublicPort {
-				newConn.Close()
-				return fmt.Errorf("公网端口漂移 %d -> %d", expectedPublicPort, newPort)
+			// STUN正常但端口变化，触发重启
+			if port != expectedPublicPort {
+				return fmt.Errorf("❌ 公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, port)
 			}
 
-			logrus.Infof("✅ STUN重连成功，端口保持 %d", newPort)
-			currentStunConn = newConn
-			continue
+			// STUN正常但服务持续失败，可能是上游服务问题
+			logrus.Warnf("STUN端口正常但服务检查持续失败（已检查 %d 次），可能需要检查上游服务", maxFailures)
 		}
-
-		if failureCount >= maxFailures {
-			return fmt.Errorf("[%s] 连续 %d 次检查失败，重新打洞", service.Name, maxFailures)
-		}
-
-		// STUN正常但端口变化，触发重启
-		if port != expectedPublicPort {
-			return fmt.Errorf("❌ 公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, port)
-		}
-
-		// STUN正常但服务持续失败，可能是上游服务问题
-		logrus.Warnf("STUN端口正常但服务检查持续失败（已检查 %d 次），可能需要检查上游服务", maxFailures)
 	}
 
-	return nil
 }
 
 // UDP健康检测
