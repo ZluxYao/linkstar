@@ -30,8 +30,9 @@ func (StunApi) StunDeviceDeleteView(c *gin.Context) {
 	}
 
 	// 停止该设备下所有服务的 STUN 穿透
+	// 修复：原版调用已删除的全局函数 stun.StopService，改为调度器实例方法
 	for _, svc := range global.StunConfig.Devices[deviceIndex].Services {
-		stun.StopService(cr.DeviceID, svc.ID)
+		global.StunScheduler.StopService(cr.DeviceID, svc.ID)
 	}
 
 	// 从切片中删除该设备

@@ -14,16 +14,15 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// RunStunTunnelWithContext 实现内网穿透逻辑  支持 context 取消的穿透逻辑
+// RunStunTunnelWithContext 实现内网穿透逻辑，支持 context 取消
 func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *model.Service) error {
-	protocol := strings.ToLower(service.Protocol) // 转为小写
-
-	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP) //端口为0任意端口
+	protocol := strings.ToLower(service.Protocol)
+	localAddr := fmt.Sprintf("%s:0", global.StunConfig.LocalIP)
 
 	// STUN 拨号
 	stunConn, err := reuseport.Dial(protocol, localAddr, global.StunConfig.BestSTUN)
 	if err != nil {
-		return fmt.Errorf("STUN拨号失败 [%s]:%w", global.StunConfig.BestSTUN, err)
+		return fmt.Errorf("STUN拨号失败 [%s]: %w", global.StunConfig.BestSTUN, err)
 	}
 
 	var localPort uint16
@@ -33,7 +32,7 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		localPort = uint16(stunConn.LocalAddr().(*net.UDPAddr).Port)
 	}
 
-	// STUN 握手
+	// STUN 握手，获取公网 IP:Port
 	var publicIP string
 	var publicPort int
 	if protocol == "tcp" {
@@ -45,37 +44,28 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 	}
 	if err != nil {
 		stunConn.Close()
-		return fmt.Errorf("与STUN服务器握手失败:%w", err)
+		return fmt.Errorf("与STUN服务器握手失败: %w", err)
 	}
 
 	// 端口复用监听
 	listenAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
-	listener, err := reuseport.Listen(protocol, listenAddr) // 使用reuseport SO_REUSEPORT 可以复用端口
+	listener, err := reuseport.Listen(protocol, listenAddr)
 	if err != nil {
 		stunConn.Close()
-		return fmt.Errorf("端口监听失败：%w", err)
+		return fmt.Errorf("端口监听失败: %w", err)
 	}
 
-	// 路由器upnp映射
-	upnpCtx, upnpCancel := context.WithTimeout(ctx, 25*time.Second) //创建upnp的ctx
+	// UPnP 映射（非致命，失败继续运行）
+	upnpCtx, upnpCancel := context.WithTimeout(ctx, 25*time.Second)
 	defer upnpCancel()
 	description := fmt.Sprintf("LinkStar-%s", service.Name)
-	err = AddPortMappingQueue(upnpCtx, localPort, localPort, "TCP", description)
-	if err != nil {
+	if err = AddPortMappingQueue(upnpCtx, localPort, localPort, "TCP", description); err != nil {
 		logrus.Warnf("[%s] UPnP 映射失败 (非致命): %v", service.Name, err)
-		// todo 处理失败
 	} else {
-		logrus.Infof("[%s] UPnP 映射成功: 路由器 WAN:%d -> 本机:%d", service.Name, localPort, localPort)
+		logrus.Infof("[%s] UPnP 映射成功: WAN:%d -> 本机:%d", service.Name, localPort, localPort)
 	}
 
-	// ctx 取消时关闭连接，让所有阻塞调用立即返回
-	// go func() {
-	// 	<-ctx.Done()
-	// 	logrus.Infof("[%s] ctx 取消，关闭连接", service.Name)
-	// 	stunConn.Close()
-	// 	listener.Close()
-	// }()
-	// 确保所有子 goroutine（健康检查、Accept循环）能感知到退出信号，不再泄露。
+	// innerCtx：统一控制健康检查和 Accept 循环的退出
 	innerCtx, innerCancel := context.WithCancel(ctx)
 	defer innerCancel()
 
@@ -88,25 +78,24 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		service.ExternalPort = 0
 	}()
 
-	errCh := make(chan error, 3)
-	logrus.Infof("%v %v %v", localPort, publicIP, publicPort)
-
-	// 存储数据
+	// 更新服务状态
 	var publicURL string
 	if service.TLS {
 		publicURL = fmt.Sprintf("https://%s:%d", publicIP, publicPort)
 	} else {
 		publicURL = fmt.Sprintf("http://%s:%d", publicIP, publicPort)
 	}
-
 	service.ExternalPort = uint16(publicPort)
 	service.PunchSuccess = true
+	logrus.Infof("[%s] 穿透成功 本地端口:%d 公网:%s", service.Name, localPort, publicURL)
 
-	// 开启保活
+	// errCh buffer=2，健康检查和 Accept 各一个写入位置，不会阻塞
+	errCh := make(chan error, 2)
+
+	// 健康检查 goroutine
 	if protocol == "tcp" {
 		go func() {
-			err = tcpStunHealthCheck(innerCtx, stunConn, publicIP, publicPort, localPort, service)
-			if err != nil {
+			if err := tcpStunHealthCheck(innerCtx, stunConn, publicIP, publicPort, localPort, service.Name); err != nil {
 				service.PunchSuccess = false
 				errCh <- fmt.Errorf("TCP健康检查失败: %w", err)
 			}
@@ -115,14 +104,14 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		go func() {
 			udpConn := stunConn.(*net.UDPConn)
 			stunServerAddr, _ := net.ResolveUDPAddr("udp", global.StunConfig.BestSTUN)
-			err = udpStunHealthCheck(udpConn, stunServerAddr, publicPort, localPort)
-			if err != nil {
+			if err := udpStunHealthCheck(innerCtx, udpConn, stunServerAddr, publicPort, localPort); err != nil {
 				service.PunchSuccess = false
 				errCh <- fmt.Errorf("UDP健康检查失败: %w", err)
 			}
 		}()
 	}
 
+	// Accept 循环 goroutine
 	go func() {
 		targetAddr := fmt.Sprintf("%s:%d", targetIP, service.InternalPort)
 		for {
@@ -136,246 +125,252 @@ func RunStunTunnelWithContext(ctx context.Context, targetIP string, service *mod
 		}
 	}()
 
-	// 输出访问数据
-	logrus.Infof("   访问地址: %s", publicURL)
 	return <-errCh
 }
 
-// 与STUN服务器握手TCP
-func doTcpStunHandshake(conn net.Conn) (string, int, error) {
+// ═══════════════════════════════════════════════════
+// STUN 握手
+// ═══════════════════════════════════════════════════
 
-	// 发送STUN请求
+func doTcpStunHandshake(conn net.Conn) (string, int, error) {
 	msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
 	if _, err := conn.Write(msg.Raw); err != nil {
-		return "", 0, fmt.Errorf("发送STUN请求失败%s", err)
+		return "", 0, fmt.Errorf("发送STUN请求失败: %w", err)
 	}
 
-	// 读取响应
 	conn.SetDeadline(time.Now().Add(3 * time.Second))
-	defer conn.SetReadDeadline(time.Time{})
+	defer conn.SetDeadline(time.Time{})
 
 	buf := make([]byte, 1024)
 	n, err := conn.Read(buf)
 	if err != nil {
-		return "", 0, fmt.Errorf("读取响应失败：%s", err)
+		return "", 0, fmt.Errorf("读取响应失败: %w", err)
 	}
 
-	// 解析响应
 	var response stun.Message
 	response.Raw = buf[:n]
 	if err = response.Decode(); err != nil {
-		return "", 0, fmt.Errorf("解码stun失败%s", err)
+		return "", 0, fmt.Errorf("解码STUN失败: %w", err)
 	}
 
 	var xorAddr stun.XORMappedAddress
 	if err = xorAddr.GetFrom(&response); err != nil {
-		return "", 0, fmt.Errorf("获取映射地址失败: %s", err)
-
+		return "", 0, fmt.Errorf("获取映射地址失败: %w", err)
 	}
-
 	return xorAddr.IP.String(), xorAddr.Port, nil
 }
 
-// 与STUN服务器握手UDP
 func doUDPStunHandshake(conn *net.UDPConn, stunServerAddr *net.UDPAddr) (string, int, error) {
-
-	// 发送STUN请求
 	msg := stun.MustBuild(stun.TransactionID, stun.BindingRequest)
 	if _, err := conn.WriteToUDP(msg.Raw, stunServerAddr); err != nil {
-		return "", 0, fmt.Errorf("发送UDP STUN请求失败: %v", err)
+		return "", 0, fmt.Errorf("发送UDP STUN请求失败: %w", err)
 	}
 
-	// 设置超时
 	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 	defer conn.SetReadDeadline(time.Time{})
 
-	//读取响应
 	buf := make([]byte, 1024)
 	n, _, err := conn.ReadFromUDP(buf)
 	if err != nil {
-		return "", 0, fmt.Errorf("读取UDP响应失败: %v", err)
+		return "", 0, fmt.Errorf("读取UDP响应失败: %w", err)
 	}
 
-	// 解析响应
 	var response stun.Message
 	response.Raw = buf[:n]
 	if err = response.Decode(); err != nil {
-		return "", 0, fmt.Errorf("解码UDP STUN失败%s", err)
+		return "", 0, fmt.Errorf("解码UDP STUN失败: %w", err)
 	}
 
 	var xorAddr stun.XORMappedAddress
 	if err = xorAddr.GetFrom(&response); err != nil {
-		return "", 0, fmt.Errorf("获取UDP映射地址失败: %v", err)
-
+		return "", 0, fmt.Errorf("获取UDP映射地址失败: %w", err)
 	}
-
 	return xorAddr.IP.String(), xorAddr.Port, nil
 }
 
-// TCP首次健康检测保活
-func firstTcpHealthKeep(publicIP string, expectedPublicPort int) bool {
+// ═══════════════════════════════════════════════════
+// TCP 健康检查
+// ═══════════════════════════════════════════════════
+
+// firstTcpHealthKeep 首次保活检测，等待 NAT 打洞稳定
+// 修复：原版 time.Sleep 不感知 ctx，改为 sleepWithCtx
+// 返回 false 表示保活失败或 ctx 已取消
+func firstTcpHealthKeep(ctx context.Context, publicIP string, expectedPublicPort int) bool {
 	sleepTime := 2 * time.Second
 	for i := 0; i < 3; i++ {
-		time.Sleep(sleepTime)
+		// ctx 取消时立即返回，不再阻塞 StopService 等待
+		if !sleepWithCtx(ctx, sleepTime) {
+			return false
+		}
 		if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
 			return true
 		}
-		sleepTime = sleepTime * 2 // 休息2 4 8秒还不通就是死了
+		sleepTime *= 2 // 2s → 4s → 8s
 	}
 	return false
 }
 
-// TCP STUN 健康检测
-func tcpStunHealthCheck(ctx context.Context, stunConn net.Conn, publicIP string, expectedPublicPort int, localPort uint16, service *model.Service) error {
-	healthTicker := time.NewTicker(28 * time.Second) // 每28s 检测一次
+// tcpStunHealthCheck TCP 保活与健康检测
+// 修复：去掉 service 参数，只接收 serviceName 字符串，状态管理由调度器负责
+func tcpStunHealthCheck(ctx context.Context, stunConn net.Conn, publicIP string, expectedPublicPort int, localPort uint16, serviceName string) error {
+	// 首次保活
+	if !firstTcpHealthKeep(ctx, publicIP, expectedPublicPort) {
+		if ctx.Err() != nil {
+			return nil // ctx 取消，正常退出，不算失败
+		}
+		return fmt.Errorf("[%s] 首次保活失败，触发重启", serviceName)
+	}
+
+	healthTicker := time.NewTicker(28 * time.Second)
 	defer healthTicker.Stop()
 
-	// 首次保活与检测
-	if !firstTcpHealthKeep(publicIP, expectedPublicPort) {
-		return fmt.Errorf("[%s] 首次保活失败，重启", service.Name)
-	}
-	service.PunchSuccess = true
-
-	maxFailures := 3 // 失败阈值
+	maxFailures := 3
 	failureCount := 0
 	currentStunConn := stunConn
 
-	logrus.Infof("[%s] 启动TCP健康检查 间隔28s", service.Name)
+	logrus.Infof("[%s] TCP健康检查启动，间隔28s", serviceName)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
+
 		case <-healthTicker.C:
-			// 策略1: 端到端服务检测+保活
+			// 策略1：端到端连通性检测
 			if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-
-				failureCount = 0 // 成功就重置
-				continue         // 服务正常，跳过stun检查
+				failureCount = 0
+				continue
 			}
-
 			failureCount++
 
-			if failureCount == 1 { // 若果是第一次失败防止网络波动，来多一次
+			// 第一次失败可能是抖动，立即补测一次
+			if failureCount == 1 {
 				if tcpConnectCheck(publicIP, expectedPublicPort, 3*time.Second) {
-					failureCount = 0 // 成功就重置
+					failureCount = 0
 					continue
 				}
 			}
+			logrus.Warnf("[%s] 端到端检查失败 (%d/%d)", serviceName, failureCount, maxFailures)
 
-			logrus.Warnf("[%s] 端到端检查失败 (%d/%d)", service.Name, failureCount, maxFailures)
-
-			// 策略2: STUN 检测NAT映射
+			// 策略2：STUN 检测 NAT 映射是否存活
 			_, port, err := doTcpStunHandshake(currentStunConn)
 			if err != nil {
-				logrus.Infof("STUN连接断开，尝试重连...")
-
-				// 关闭旧连接
+				// STUN 连接断开，尝试重连
+				logrus.Infof("[%s] STUN连接断开，尝试重连...", serviceName)
 				currentStunConn.Close()
-				// 重连STUN
+
 				localAddr := fmt.Sprintf("%s:%d", global.StunConfig.LocalIP, localPort)
 				newConn, err := reuseport.Dial("tcp", localAddr, global.StunConfig.BestSTUN)
 				if err != nil {
 					return fmt.Errorf("STUN重连失败: %w", err)
 				}
 
-				// 验证新连接的端口
 				_, newPort, err := doTcpStunHandshake(newConn)
 				if err != nil {
 					newConn.Close()
 					return fmt.Errorf("重连后STUN验证失败: %w", err)
 				}
 
-				// 检查端口是否变化
 				if newPort != expectedPublicPort {
 					newConn.Close()
-					return fmt.Errorf("公网端口漂移 %d -> %d", expectedPublicPort, newPort)
+					return fmt.Errorf("公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, newPort)
 				}
 
-				logrus.Infof("✅ STUN重连成功，端口保持 %d", newPort)
+				logrus.Infof("[%s] STUN重连成功，端口保持 %d", serviceName, newPort)
 				currentStunConn = newConn
 				continue
 			}
 
-			if failureCount >= maxFailures {
-				return fmt.Errorf("[%s] 连续 %d 次检查失败，重新打洞", service.Name, maxFailures)
-			}
-
-			// STUN正常但端口变化，触发重启
+			// STUN 正常但端口漂移
 			if port != expectedPublicPort {
-				return fmt.Errorf("❌ 公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, port)
+				return fmt.Errorf("公网端口漂移 %d -> %d，需要重新打洞", expectedPublicPort, port)
 			}
 
-			// STUN正常但服务持续失败，可能是上游服务问题
-			logrus.Warnf("STUN端口正常但服务检查持续失败（已检查 %d 次），可能需要检查上游服务", maxFailures)
+			// STUN 正常但端到端持续失败，达到阈值才重启
+			if failureCount >= maxFailures {
+				return fmt.Errorf("[%s] 端到端连续失败 %d 次，触发重启", serviceName, maxFailures)
+			}
+
+			logrus.Warnf("[%s] STUN端口正常但服务检查持续失败，可能是上游服务问题", serviceName)
 		}
 	}
-
 }
 
-// UDP健康检测
-func udpStunHealthCheck(udpConn *net.UDPConn, stunServer *net.UDPAddr, expectedPublicPort int, localPort uint16) error {
-	healthTicker := time.NewTicker(280 * time.Second) // 每28s 健康检测一次
+// ═══════════════════════════════════════════════════
+// UDP 健康检查
+// ═══════════════════════════════════════════════════
+
+// udpStunHealthCheck UDP 保活与健康检测
+// 修复1：原版 ticker 是 280s，注释却写28s，改回 28s
+// 修复2：for range ticker.C 不感知 ctx，改为 select
+func udpStunHealthCheck(ctx context.Context, udpConn *net.UDPConn, stunServer *net.UDPAddr, expectedPublicPort int, localPort uint16) error {
+	healthTicker := time.NewTicker(28 * time.Second) // 修复：原版误写成 280s
 	defer healthTicker.Stop()
 
-	consecutiveFailures := 0 // 连续失败计数器
-	maxFailures := 3         // 失败阈值
+	consecutiveFailures := 0
+	maxFailures := 3
 	currentConn := udpConn
 
-	logrus.Info("启动UDP健康检查 间隔28s")
+	logrus.Info("UDP健康检查启动，间隔28s")
 
-	for range healthTicker.C {
-		// STUN 检测NAT映射
-		_, port, err := doUDPStunHandshake(currentConn, stunServer)
-		if err != nil {
-			consecutiveFailures++
-			logrus.Warnf("UDP STUN检查失败 (%d/%d): %v", consecutiveFailures, maxFailures, err)
+	for {
+		select {
+		case <-ctx.Done(): // 修复：原版 for range 无法感知 ctx 取消
+			return nil
 
-			// 达到失败阈值，尝试重建
-			if consecutiveFailures >= maxFailures {
+		case <-healthTicker.C:
+			_, port, err := doUDPStunHandshake(currentConn, stunServer)
+			if err != nil {
+				consecutiveFailures++
+				logrus.Warnf("UDP STUN检查失败 (%d/%d): %v", consecutiveFailures, maxFailures, err)
+
+				if consecutiveFailures < maxFailures {
+					continue
+				}
+
+				// 达到失败阈值，尝试重建 UDP 连接
 				logrus.Infof("UDP连接异常，尝试重建...")
-				// 重建
 				currentConn.Close()
+
 				localAddr := &net.UDPAddr{
 					IP:   net.ParseIP(global.StunConfig.LocalIP),
 					Port: int(localPort),
 				}
 				newConn, err := net.ListenUDP("udp", localAddr)
 				if err != nil {
-					return fmt.Errorf("UDP重建失败: %v", err)
+					return fmt.Errorf("UDP重建失败: %w", err)
 				}
 
-				// 验证新的连接，确保外部端口没变
 				_, newPort, err := doUDPStunHandshake(newConn, stunServer)
 				if err != nil {
 					newConn.Close()
-					return fmt.Errorf("重建后STUN验证失败: %v", err)
+					return fmt.Errorf("重建后STUN验证失败: %w", err)
 				}
 
-				// 判断端口变没，如果变了必须退出，重新打洞
 				if newPort != expectedPublicPort {
 					newConn.Close()
 					return fmt.Errorf("公网端口漂移 %d -> %d", expectedPublicPort, newPort)
 				}
 
-				logrus.Infof("✅ UDP重建成功，端口保持 %d", newPort)
+				logrus.Infof("UDP重建成功，端口保持 %d", newPort)
 				currentConn = newConn
-				consecutiveFailures = 0 // 重建成功，重置计数
+				consecutiveFailures = 0
+				continue
 			}
-			continue
-		}
 
-		// STUN 正常 但是端口变了，得重启
-		if port != expectedPublicPort {
-			return fmt.Errorf("❌ 公网端口变化 %d -> %d", expectedPublicPort, port)
-		}
+			// STUN 正常但端口漂移
+			if port != expectedPublicPort {
+				return fmt.Errorf("公网端口变化 %d -> %d", expectedPublicPort, port)
+			}
 
-		// STUN正常
-		consecutiveFailures = 0
+			consecutiveFailures = 0
+		}
 	}
-	return nil
-
 }
+
+// ═══════════════════════════════════════════════════
+// 工具函数
+// ═══════════════════════════════════════════════════
 
 // tcpConnectCheck 通用 TCP 连通性检查
 func tcpConnectCheck(host string, port int, timeout time.Duration) bool {

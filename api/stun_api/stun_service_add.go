@@ -77,10 +77,11 @@ func (StunApi) StunServiceAddView(c *gin.Context) {
 	}
 
 	// 启动该服务的 STUN 穿透
+	// 修复：原版调用已删除的全局函数 stun.StartService，改为调度器实例方法
+	// 注意：必须从 global 切片取指针，不能用局部变量 newService（append 后地址可能已变）
 	device := &global.StunConfig.Devices[deviceIndex]
 	services := device.Services
-	stun.StartService(device, &services[len(services)-1])
+	global.StunScheduler.StartService(device, &services[len(services)-1])
 
 	res.OkWithData(newService, c)
 }
-

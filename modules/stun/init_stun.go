@@ -18,6 +18,10 @@ func InitSTUN() error {
 		logrus.Fatal("读取配置文件失败", err)
 	}
 
+	// 初始化调度器，挂载到 global 供 API 层调用
+	// 必须在 StartAllServices 之前完成，否则 API 层拿到的是 nil
+	global.StunScheduler = NewScheduler()
+
 	// 监听退出保持配置文件
 	go SetupShutdownHook(func() {
 		err := UpdateStunConfig(global.StunConfig)
@@ -95,7 +99,8 @@ func InitSTUN() error {
 	fmt.Println("网络拓扑图", global.StunConfig.NatRouterList)
 
 	// 3. 启动所有服务的STUN映射（协程启动）
-	go StartAllServices()
+	// StartAllServices 已改为 Scheduler 实例方法，通过 global.StunScheduler 调用
+	go global.StunScheduler.StartAllServices()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
 	return nil

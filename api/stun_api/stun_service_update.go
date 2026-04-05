@@ -11,9 +11,9 @@ import (
 )
 
 type StunServiceUpdateViewRequest struct {
-	DeviceID  uint   `json:"deviceId"`  // 设备ID
-	ServiceID uint   `json:"serviceId"` // 服务ID
-	Name      string `json:"name"`      // 服务名称
+	DeviceID     uint   `json:"deviceId"`     // 设备ID
+	ServiceID    uint   `json:"serviceId"`    // 服务ID
+	Name         string `json:"name"`         // 服务名称
 	InternalPort uint16 `json:"internalPort"` // 内网端口
 	Protocol     string `json:"protocol"`     // 传输协议 "TCP"/"UDP"
 	TLS          bool   `json:"tls"`          // 证书
@@ -74,8 +74,9 @@ func (StunApi) StunServiceUpdateView(c *gin.Context) {
 	}
 
 	// 重启该服务的 STUN 穿透（停旧起新）
+	// 修复：原版调用已删除的全局函数 stun.StartService，改为调度器实例方法
 	device := &global.StunConfig.Devices[deviceIndex]
-	stun.StartService(device, &device.Services[serviceIndex])
+	global.StunScheduler.StartService(device, &device.Services[serviceIndex])
 
 	res.OkWithData(*svc, c)
 }

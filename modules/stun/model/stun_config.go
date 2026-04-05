@@ -17,7 +17,7 @@ type StunConfig struct {
 }
 
 type Device struct {
-	DeviceID uint      `josn:"id"`       // 设备ID
+	DeviceID uint      `json:"id"`       // 修复：原版拼写错误 josn -> json，序列化时该字段会丢失
 	Name     string    `json:"name"`     // "本机" / "群晖NAS" / "树莓派"
 	IP       string    `json:"ip"`       // 设备ip
 	Services []Service `json:"services"` // 该设备上的服务
