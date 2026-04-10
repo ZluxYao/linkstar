@@ -99,7 +99,7 @@ func InitSTUN() error {
 	fmt.Println("网络拓扑图", global.StunConfig.NatRouterList)
 
 	// 3. 启动所有服务的STUN映射（协程启动）
-	// StartAllServices 已改为 Scheduler 实例方法，通过 global.StunScheduler 调用
+	// StartAllServices 是 Scheduler 实例方法，通过 global.StunScheduler 调用
 	go global.StunScheduler.StartAllServices()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")

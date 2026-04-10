@@ -18,10 +18,10 @@ import (
 type ServicePhase int
 
 const (
-	PhaseProbing    ServicePhase = iota // 探针期：验证配置，最多5次
-	PhaseRunning                        // 运行期：穿透成功运行中
+	PhaseProbing    ServicePhase = iota // 探针期：验证配置，最多 maxProbes 次连续失败
+	PhaseRunning                        // 运行期：穿透曾经成功过，断线后无限重启
 	PhaseRestarting                     // 等待重启中（backoff 计时）
-	PhaseFailed                         // 终态：探针失败，需人工改配置
+	PhaseFailed                         // 终态：探针耗尽，需人工改配置后重新启用
 	PhaseStopped                        // 主动停止
 )
 
@@ -64,14 +64,14 @@ type RingLog struct {
 	mu    sync.RWMutex
 	buf   []LogEntry
 	head  int // 下一个写入位置
-	count int // 已写入条数（未超容量时 < cap）
+	count int // 已写入条数（未超容量时 < bufLen）
 }
 
 func NewRingLog(capacity int) *RingLog {
 	return &RingLog{buf: make([]LogEntry, capacity)}
 }
 
-// Write 写一条日志（内部用，调用方自行加锁或直接调用公开方法）
+// Write 写一条日志
 func (r *RingLog) Write(level LogLevel, msg string) {
 	r.mu.Lock()
 	r.buf[r.head] = LogEntry{Time: time.Now(), Level: level, Message: msg}
@@ -88,7 +88,7 @@ func (r *RingLog) ReadAll() []LogEntry {
 	defer r.mu.RUnlock()
 
 	result := make([]LogEntry, r.count)
-	bufLen := len(r.buf) // 修复：原版用 cap 作变量名，遮蔽了内置函数 cap()
+	bufLen := len(r.buf) // 不用 cap 作变量名，避免遮蔽内置函数
 	if r.count < bufLen {
 		copy(result, r.buf[:r.count])
 	} else {
@@ -181,11 +181,11 @@ func newEntry(cancel context.CancelFunc) *serviceEntry {
 		done:      make(chan struct{}),
 		phase:     PhaseProbing,
 		updatedAt: time.Now(),
-		ringLog:   NewRingLog(200), // 保留最近200条日志
+		ringLog:   NewRingLog(200), // 保留最近 200 条日志
 	}
 }
 
-// setState goroutine 内部调用，更新状态并写日志
+// setState goroutine 内部调用，更新状态
 func (e *serviceEntry) setState(phase ServicePhase, errMsg string) {
 	e.mu.Lock()
 	e.phase = phase
@@ -253,7 +253,7 @@ func serviceKey(deviceID, serviceID uint) string {
 	return fmt.Sprintf("%d-%d", deviceID, serviceID)
 }
 
-// Subscribe 返回只读事件 channel，面板订阅状态变更
+// Subscribe 返回只读事件 channel，面板订阅状态变更（SSE / WebSocket 推送用）
 func (s *Scheduler) Subscribe() <-chan StateEvent {
 	return s.eventCh
 }
@@ -297,15 +297,70 @@ func (s *Scheduler) emit(entry *serviceEntry, key string) {
 	case s.eventCh <- event:
 	default:
 		// 面板消费太慢，丢弃本次事件
-		// 状态已经在 entry 里更新，面板可以通过 Snapshot() 轮询
+		// 状态已经在 entry 里更新，面板可以通过 Snapshot() 轮询补偿
 		logrus.Warnf("[%s] 事件队列满，丢弃状态推送", key)
 	}
 }
 
 // ═══════════════════════════════════════════════════
-// runService  goroutine 主体，服务生命周期状态机
+// watchPunchSuccess
+//
+// 在 RunStunTunnelWithContext 运行期间，轮询 service.PunchSuccess。
+// 一旦检测到变为 true，立即将 entry.phase 升级为 PhaseRunning，
+// 并重置 backoff，然后退出（后续由主循环维护状态）。
+//
+// 为什么需要这个 goroutine？
+// stun.go 在穿透成功时置 service.PunchSuccess = true，
+// 在 defer 清理时置回 false。
+// RunStunTunnelWithContext 返回后调度器已无法感知"本次是否曾经成功过"。
+// 因此必须在函数运行期间实时捕获这个信号。
 // ═══════════════════════════════════════════════════
 
+func watchPunchSuccess(
+	ctx context.Context,
+	service *model.Service,
+	entry *serviceEntry,
+	backoff *Backoff,
+	key string,
+	s *Scheduler,
+	promoted chan<- struct{}, // 关闭表示"已升级为 PhaseRunning"
+) {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if service.PunchSuccess {
+				// 穿透成功，升级阶段并重置 backoff
+				entry.setState(PhaseRunning, "")
+				backoff.Reset()
+				s.emit(entry, key)
+				close(promoted) // 通知主循环，只关闭一次
+				return
+			}
+		}
+	}
+}
+
+// ═══════════════════════════════════════════════════
+// runService  goroutine 主体，服务生命周期状态机
+//
+// 阶段转换规则：
+//
+//	PhaseProbing：
+//	  每次调用 RunStunTunnelWithContext，同时启动 watchPunchSuccess。
+//	  - 若 watchPunchSuccess 检测到 PunchSuccess=true → 升级为 PhaseRunning（probeCount 不增加）
+//	  - 若函数返回时仍未升级 → probeCount++
+//	  - probeCount >= maxProbes → PhaseFailed（终态，需人工重新启用）
+//
+//	PhaseRunning：
+//	  断线后无限重启，backoff 递增。
+//	  再次穿透成功（watchPunchSuccess 触发）后 backoff 重置。
+//
+// ═══════════════════════════════════════════════════
 func (s *Scheduler) runService(
 	ctx context.Context,
 	device *model.Device,
@@ -314,13 +369,9 @@ func (s *Scheduler) runService(
 	key string,
 ) {
 	// 无论以何种方式退出，都关闭 done
-	// 这是告诉 StartService / StopService "我真的退出了"
 	defer close(entry.done)
 
-	const (
-		maxProbes       = 5
-		stableThreshold = 2 * time.Minute
-	)
+	const maxProbes = 5
 
 	probeCount := 0
 	backoff := NewBackoff()
@@ -338,12 +389,24 @@ func (s *Scheduler) runService(
 			return
 		}
 
-		entry.log(LogInfo, "[%s] 启动穿透 phase=%s probe=%d restart=%d",
-			service.Name, entry.phase.String(), probeCount, entry.restartCount)
+		// 读取当前阶段（加锁，避免数据竞争）
+		entry.mu.RLock()
+		currentPhase := entry.phase
+		entry.mu.RUnlock()
 
-		startTime := time.Now()
+		entry.log(LogInfo, "[%s] 启动穿透 phase=%s probe=%d restart=%d",
+			service.Name, currentPhase.String(), probeCount, entry.restartCount)
+
+		// innerCtx：控制 watchPunchSuccess 的生命周期，
+		// RunStunTunnelWithContext 返回后立即取消，避免 watcher 泄露
+		innerCtx, innerCancel := context.WithCancel(ctx)
+
+		// promoted 关闭表示本次穿透期间曾经成功过
+		promoted := make(chan struct{})
+		go watchPunchSuccess(innerCtx, service, entry, backoff, key, s, promoted)
+
 		err := RunStunTunnelWithContext(ctx, device.IP, service)
-		runDuration := time.Since(startTime)
+		innerCancel() // 停止 watcher
 
 		// ctx 被取消（StopService 调用），正常退出，不计入失败
 		if ctx.Err() != nil {
@@ -353,32 +416,53 @@ func (s *Scheduler) runService(
 			return
 		}
 
-		// ── 到这里说明是异常退出 ──────────────────────────
+		// 检查本次穿透期间是否曾经成功（非阻塞读 promoted channel）
+		everSucceeded := false
+		select {
+		case <-promoted:
+			everSucceeded = true
+		default:
+		}
+
 		errMsg := ""
 		if err != nil {
 			errMsg = err.Error()
 		}
-		entry.log(LogWarn, "[%s] 穿透中断: %v (运行了 %v)", service.Name, err, runDuration)
+		entry.log(LogWarn, "[%s] 穿透中断: %v", service.Name, err)
 
-		// 判断当前所处阶段
-		// 修复：entry.phase 裸读存在数据竞争，改为加锁读取
+		// 读取穿透结束后的最新阶段（watchPunchSuccess 可能已升级为 PhaseRunning）
 		entry.mu.RLock()
-		currentPhase := entry.phase
+		phaseNow := entry.phase
 		entry.mu.RUnlock()
 
-		// 只要稳定运行过 stableThreshold，无论从哪个阶段退出都升级为 RUNNING
-		// 这样即使在探针期运行了2分钟后才断线，也进入无限重启而不是探针计数
-		if runDuration >= stableThreshold {
-			currentPhase = PhaseRunning
-		}
+		// ── 阶段分支 ─────────────────────────────────────
 
-		switch currentPhase {
-		case PhaseProbing:
+		if phaseNow == PhaseRunning || everSucceeded {
+			// 穿透曾经成功过（运行期断线），无限重启，backoff 递增
+			wait := backoff.Next()
+			entry.log(LogWarn, "[%s] 运行中断，%v 后重启 (第 %d 次)",
+				service.Name, wait, entry.restartCount+1)
+
+			entry.setState(PhaseRestarting, errMsg)
+			s.emit(entry, key)
+
+			if !sleepWithCtx(ctx, wait) {
+				entry.setState(PhaseStopped, "")
+				s.emit(entry, key)
+				return
+			}
+
+			// 保持 PhaseRunning，等待下次穿透
+			entry.setState(PhaseRunning, "")
+			s.emit(entry, key)
+
+		} else {
+			// 穿透从未成功过，计入探针失败
 			probeCount++
 			entry.log(LogWarn, "[%s] 探针失败 %d/%d: %v", service.Name, probeCount, maxProbes, err)
 
 			if probeCount >= maxProbes {
-				// 探针耗尽 → FAILED 终态，需要人工改配置后重新 enabled=true
+				// 探针耗尽 → FAILED 终态
 				service.Enabled = false
 				service.PunchSuccess = false
 				entry.log(LogError, "[%s] 探针连续失败 %d 次，进入 FAILED，请检查配置后重新启用",
@@ -386,8 +470,7 @@ func (s *Scheduler) runService(
 				entry.setState(PhaseFailed, errMsg)
 				s.emit(entry, key)
 
-				// 从 map 里删掉自己，不再占用 key
-				// 修复：同时清理 meta，避免内存泄漏
+				// 从 map 里删掉自己，同时清理 meta，不再占用 key
 				s.mu.Lock()
 				delete(s.services, key)
 				delete(s.meta, key)
@@ -406,28 +489,6 @@ func (s *Scheduler) runService(
 			}
 
 			entry.setState(PhaseProbing, "")
-			s.emit(entry, key)
-
-		case PhaseRunning:
-			// 修复：只有稳定运行超过阈值才 Reset backoff，避免配置问题时产生重试风暴
-			// 原版每次都 Reset，导致 wait 永远是 steps[0]=1s
-			if runDuration >= stableThreshold {
-				backoff.Reset()
-			}
-			wait := backoff.Next()
-			entry.log(LogWarn, "[%s] 运行中断，%v 后重启 (第 %d 次)",
-				service.Name, wait, entry.restartCount+1)
-
-			entry.setState(PhaseRestarting, errMsg)
-			s.emit(entry, key)
-
-			if !sleepWithCtx(ctx, wait) {
-				entry.setState(PhaseStopped, "")
-				s.emit(entry, key)
-				return
-			}
-
-			entry.setState(PhaseRunning, "")
 			s.emit(entry, key)
 		}
 	}
@@ -456,9 +517,8 @@ func (s *Scheduler) StartService(device *model.Device, service *model.Service) {
 			logrus.Warnf("[%s] 旧实例超时，强制继续", key)
 		}
 
+		// 重新加锁后二次检查，防止并发 StartService 已写入新实例被覆盖
 		s.mu.Lock()
-
-		// 修复：重新加锁后二次检查，防止并发 StartService 已写入新实例被覆盖
 		if _, exists := s.services[key]; exists {
 			s.mu.Unlock()
 			logrus.Warnf("[%s] 并发启动冲突，放弃本次", key)
@@ -498,7 +558,7 @@ func (s *Scheduler) StopService(deviceID, serviceID uint) {
 	}
 	entry.cancel()
 	oldDone := entry.done
-	// 修复：同时清理 meta，避免内存泄漏
+	// 同时清理 meta，避免内存泄漏
 	delete(s.services, key)
 	delete(s.meta, key)
 	s.mu.Unlock()
@@ -525,7 +585,7 @@ func (s *Scheduler) StopAll() {
 		keys = append(keys, k)
 	}
 	s.services = make(map[string]*serviceEntry)
-	s.meta = make(map[string][2]string) // 修复：同时清空 meta
+	s.meta = make(map[string][2]string) // 同时清空 meta
 	s.mu.Unlock()
 
 	var wg sync.WaitGroup
