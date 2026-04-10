@@ -4,8 +4,9 @@ import "time"
 
 type StunConfig struct {
 	// 基础网络信息
-	LocalIP       string          `json:"localIP"`       // 本机内网IP
-	PublicIP      string          `json:"publicIP"`      // 真实公网IP
+	LocalIP  string `json:"localIP"`  // 本机内网IP
+	PublicIP string `json:"publicIP"` // 真实公网IP
+
 	NatRouterList []NatRouterInfo `json:"natRouterList"` // 路由信息
 	BestSTUN      string          `json:"bestStun"`      // 最快的STUN服务器
 	CreatedAt     time.Time       `json:"createdAt"`     // 配置创建时间

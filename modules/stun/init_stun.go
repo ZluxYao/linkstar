@@ -5,14 +5,8 @@ import (
 	"linkstar/global"
 	"time"
 
-	"github.com/huin/goupnp/dcps/internetgateway1"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-)
-
-var (
-	// 管理运行中的服务
-	upnpClients []*internetgateway1.WANIPConnection1
 )
 
 func InitSTUN() error {
@@ -63,12 +57,14 @@ func InitSTUN() error {
 
 	// 发现 UPnP 设备
 	g.Go(func() error {
-		clients, _, err := internetgateway1.NewWANIPConnection1Clients()
-		if err == nil && len(clients) > 0 {
-			upnpClients = clients
-			externalIP, _ := clients[0].GetExternalIPAddress()
-			logrus.Infof("📡 发现 UPnP 网关，外部IP: %s", externalIP)
-		}
+		// 发现网关
+		wg := DiscoverUPnPGateway()
+
+		// 智能选择网关
+		SelectDefaultGateway(wg)
+
+		global.UpnpGateway = wg
+
 		return nil
 	})
 
@@ -87,6 +83,9 @@ func InitSTUN() error {
 	global.StunConfig.PublicIP = publicIPInfo.PublicIP
 	global.StunConfig.LocalIP = publicIPInfo.LocalIP
 
+	// 启动公网ip更新
+	go UpdatedPublicIP()
+
 	// 设置时间戳
 	now := time.Now()
 	global.StunConfig.UpdatedAt = now
@@ -101,59 +100,3 @@ func InitSTUN() error {
 	fmt.Println("✅ 所有服务已启动,可通过以下地址访问:")
 	return nil
 }
-
-// // upnp 端口转发
-// if err := AddPortMapping(3335, 3335, "TCP", "Custom Port 3333 TCP"); err != nil {
-// 	logrus.Errorf("端口转发失败:%v", err)
-// }
-
-// if err := DeletePortMapping(3335, "TCP"); err != nil {
-// 	logrus.Errorf("端口删除失败:%v", err)
-// }
-
-// 2. 加载设备配置(从数据库或配置文件)
-// global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
-// 	DeviceID: 1,
-// 	Name:     "istore",
-// 	IP:       "192.168.100.1",
-// 	Services: []model.Service{
-// 		{
-// 			ID:           1,
-// 			Name:         "Viepass",
-// 			InternalPort: 5176,
-// 			ExternalPort: 0,
-// 			Protocol:     "TCP",
-// 			Tlss:         true,
-// 			Enabled:      true,
-// 			Description:  "HTTP服务",
-// 		},
-// 	},
-// })
-
-// global.StunConfig.Devices = append(global.StunConfig.Devices, model.Device{
-// 	DeviceID: 2,
-// 	Name:     "本机",
-// 	IP:       global.StunConfig.LocalIP,
-// 	Services: []model.Service{
-// 		{
-// 			ID:           1,
-// 			Name:         "STUN panel",
-// 			InternalPort: 3336,
-// 			ExternalPort: 0,
-// 			Protocol:     "TCP",
-// 			TLS:          false,
-// 			Enabled:      true,
-// 			Description:  "HTTP服务",
-// 		},
-// 		// {
-// 		// 	ID:           1,
-// 		// 	Name:         "7070",
-// 		// 	InternalPort: 7070,
-// 		// 	ExternalPort: 0,
-// 		// 	Protocol:     "TCP",
-// 		// 	Tlss:         false,
-// 		// 	Enabled:      true,
-// 		// 	Description:  "HTTP服务",
-// 		// },
-// 	},
-// })
