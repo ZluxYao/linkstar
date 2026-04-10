@@ -1,5 +1,6 @@
 logs
 .VsCodeCounter
+.idea
 config
 linkstar.exe
 linkstar-linux-amd64
