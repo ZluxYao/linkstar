@@ -2,14 +2,13 @@ package stun
 
 import (
 	"context"
+	"go/constant"
+	"linkstar/modules/stun/model"
 	"sync"
 	"time"
 )
 
-// ═══════════════════════════════════════════════════
-// ServicePhase 服务阶段
-// ═══════════════════════════════════════════════════
-
+// ServicePhase 服务阶段──────────────────────────────────────
 type ServicePhase int
 
 const (
@@ -20,11 +19,8 @@ const (
 	Stopped                        // 主动停止
 )
 
-// ═══════════════════════════════════════════════════
-// service 单个服务的控制句柄
-// ═══════════════════════════════════════════════════
-
-type service struct {
+// service 单个服务的控制句柄──────────────────────────────────────
+type serviceHandle struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
@@ -37,8 +33,8 @@ type service struct {
 }
 
 // 创建 service
-func newService(cancel context.CancelFunc) *service {
-	return &service{
+func newService(cancel context.CancelFunc) *serviceHandle {
+	return &serviceHandle{
 		cancel:   cancel,
 		done:     make(chan struct{}),
 		phase:    Probing,
@@ -46,9 +42,7 @@ func newService(cancel context.CancelFunc) *service {
 	}
 }
 
-// ═══════════════════════════════════════════════════
-// StateEvent  推送给面板的状态变更事件
-// ═══════════════════════════════════════════════════
+// StateEvent  推送给面板的状态变更事件──────────────────────────────────────
 type StateEvent struct {
 	Key          string       `json:"key"`
 	DeviceName   string       `json:"deviceName"`
@@ -60,15 +54,35 @@ type StateEvent struct {
 	UpdatedAt    time.Time    `json:"updatedAt"`
 }
 
-// ═══════════════════════════════════════════════════
-// Scheduler  调度器主体
-// ═══════════════════════════════════════════════════
-
+// Scheduler  调度器主体──────────────────────────────────────
 type Scheduler struct {
 	mu      sync.RWMutex
-	service map[string]*service  // key:"deviceID-serviceID"
-	meta    map[string][2]string // value → [deviceName, serviceName]  用来展示
+	service map[string]*serviceHandle // key:"deviceID-serviceID" 所有服务的管理
+	meta    map[string][2]string      // value → [deviceName, serviceName]  用来展示
 
 	eventCh chan StateEvent // 状态变更事件，面板订阅
+}
+
+// 核心状态机────────────────────────────────────
+
+// 启动服务
+func (S *Scheduler) serviceRun(ctx context.Context, service *model.Service, handle *serviceHandle) {
+	defer close(handle.done)
+
+	//探测阶段最大尝试次数
+	const maxProbes
+	probeCount := 0
+
+	for {
+		// 1.ctx 已取消，退出
+		if ctx.Err() != nil {
+			handle.phase = Stopped
+			return
+		}
+
+		// 2.启动内网穿透服务，同时跑一个watcher监听是否成功
+		innerCtx, innerCancel := context.WithCancel(ctx)
+
+	}
 
 }
