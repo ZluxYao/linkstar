@@ -2,25 +2,22 @@ package main
 
 import (
 	"embed"
-	"linkstar/core"
+	"fmt"
 	"linkstar/modules/stun"
 	"linkstar/routers"
 	"os"
-
-	"github.com/sirupsen/logrus"
 )
 
 //go:embed web
 var webFS embed.FS
 
 func main() {
-	// 设置时区
 	os.Setenv("TZ", "Asia/Shanghai")
-	core.InitLogger()
-	logrus.Info("LinkStar Run")
 
-	stun.InitSTUN()
+	if err := stun.InitSTUN(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	routers.Run(webFS)
-
 }

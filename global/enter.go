@@ -14,5 +14,5 @@ var (
 type stunScheduler interface {
 	StartService(device *model.Device, service *model.Service)
 	StopService(deviceID, serviceID uint)
-	StartAllServices()
+	StartAll(devices []model.Device)
 }

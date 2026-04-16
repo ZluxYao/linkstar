@@ -209,8 +209,23 @@ func (q *UpnpQueue) stop() {
 
 // 添加Upnp端口映射队列
 func AddPortMappingQueue(ctx context.Context, externalPort, internalPort uint16, protocol, description string) error {
+	return AddPortMappingQueueWithLocalIP(
+		ctx,
+		externalPort,
+		internalPort,
+		protocol,
+		description,
+		global.StunConfig.LocalIP,
+	)
+}
+
+func AddPortMappingQueueWithLocalIP(
+	ctx context.Context,
+	externalPort, internalPort uint16,
+	protocol, description, localIP string,
+) error {
 	return upnpQueue.submit(ctx, func() error {
-		return AddPortMapping(externalPort, internalPort, protocol, description)
+		return addPortMapping(localIP, externalPort, internalPort, protocol, description)
 	})
 }
 
@@ -223,6 +238,13 @@ func DeletePortMappingSave(ctx context.Context, externalPort uint16, protocol st
 
 // 添加UPNP端口映射
 func AddPortMapping(externalPort, internalPort uint16, protocol, description string) error {
+	return addPortMapping(global.StunConfig.LocalIP, externalPort, internalPort, protocol, description)
+}
+
+func addPortMapping(localIP string, externalPort, internalPort uint16, protocol, description string) error {
+	if localIP == "" {
+		localIP = global.StunConfig.LocalIP
+	}
 
 	logrus.Infof("尝试添加端口映射: 外部端口 %d -> 内部端口 %d (%s)", externalPort, internalPort, protocol)
 
